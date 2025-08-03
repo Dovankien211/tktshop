@@ -1,0 +1,6 @@
+2025-08-01 22:54:21 - Error [8192]: number_format(): Passing null to parameter #1 ($num) of type float is deprecated in D:\Hocweb\laragon\www\tktshop\admin\reviews\index.php on line 153
+2025-08-01 22:55:59 - Error [2]: preg_replace(): Compilation failed: invalid range in character class at offset 10 in D:\Hocweb\laragon\www\tktshop\config\config.php on line 192
+2025-08-01 22:55:59 - Error [8192]: preg_replace(): Passing null to parameter #3 ($subject) of type array|string is deprecated in D:\Hocweb\laragon\www\tktshop\config\config.php on line 193
+2025-08-01 23:07:14 - Error [2]: preg_replace(): Compilation failed: invalid range in character class at offset 10 in D:\Hocweb\laragon\www\tktshop\config\config.php on line 192
+2025-08-01 23:07:14 - Error [8192]: preg_replace(): Passing null to parameter #3 ($subject) of type array|string is deprecated in D:\Hocweb\laragon\www\tktshop\config\config.php on line 193
+2025-08-01 23:32:21 - Error [8192]: number_format(): Passing null to parameter #1 ($num) of type float is deprecated in D:\Hocweb\laragon\www\tktshop\admin\reviews\index.php on line 153
