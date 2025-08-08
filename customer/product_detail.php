@@ -519,7 +519,7 @@ function getImageUrl($imageName) {
                                  src="<?= getImageUrl($product_images[0]) ?>" 
                                  alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                  class="main-image"
-                                 onerror="this.parentElement.innerHTML='<div class=\'no-image-placeholder\'><div class=\'text-center text-muted\'><i class=\'fas fa-image fa-3x mb-3\'></i><p>Không có hình ảnh</p></div></div>'">
+                                 onerror="this.src='assets/images/no-image.jpg'"
                         <?php else: ?>
                             <div class="no-image-placeholder">
                                 <div class="text-center text-muted">
