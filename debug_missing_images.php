@@ -434,6 +434,17 @@ chmod 777 uploads/products uploads/categories uploads/users uploads/delivery</pr
       </div>";
 
 echo "</div>
+
+<script>
+// Disable auto-refresh và cache busting
+document.addEventListener('DOMContentLoaded', function() {
+    // Prevent form resubmission on page refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
+});
+</script>
+
 </body>
 </html>";
 
