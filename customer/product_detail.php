@@ -519,7 +519,7 @@ function getImageUrl($imageName) {
                                  src="<?= getImageUrl($product_images[0]) ?>" 
                                  alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                  class="main-image"
-                                 onerror="this.src='assets/images/no-image.jpg'"
+                                 onerror="this.src='assets/u'"
                         <?php else: ?>
                             <div class="no-image-placeholder">
                                 <div class="text-center text-muted">
