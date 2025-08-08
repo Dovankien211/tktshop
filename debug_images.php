@@ -293,7 +293,7 @@ function analyzeDatabase() {
         
         $missing_main_image = $total_products - $products_with_main_image;
         
-        // Check for orphaned images (images not referenced in database)
+        // Check for orphaned images
         $orphaned_images = [];
         $missing_files = [];
         
@@ -327,10 +327,8 @@ function analyzeDatabase() {
             }
         }
         
-        // Find orphaned images (in filesystem but not in database)
+        // Find orphaned and missing
         $orphaned_images = array_diff($physical_images, $db_images);
-        
-        // Find missing files (in database but not in filesystem)
         $missing_files = array_diff($db_images, $physical_images);
         
         return [
@@ -404,207 +402,11 @@ function getProductsWithImageStatus() {
 }
 
 function handleImageUpload() {
-    global $pdo;
-    
-    try {
-        if (!isset($_FILES['images']) || !isset($_POST['product_id'])) {
-            return ['success' => false, 'message' => 'No files or product ID provided'];
-        }
-        
-        $productId = (int)$_POST['product_id'];
-        $uploadedFiles = [];
-        $errors = [];
-        
-        // Validate product exists
-        $stmt = $pdo->prepare("SELECT id, ten_san_pham FROM san_pham_chinh WHERE id = ?");
-        $stmt->execute([$productId]);
-        $product = $stmt->fetch();
-        
-        if (!$product) {
-            return ['success' => false, 'message' => 'Product not found'];
-        }
-        
-        // Process uploaded files
-        $files = $_FILES['images'];
-        $fileCount = is_array($files['name']) ? count($files['name']) : 1;
-        
-        for ($i = 0; $i < $fileCount; $i++) {
-            $fileName = is_array($files['name']) ? $files['name'][$i] : $files['name'];
-            $tmpName = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
-            $error = is_array($files['error']) ? $files['error'][$i] : $files['error'];
-            $size = is_array($files['size']) ? $files['size'][$i] : $files['size'];
-            
-            if ($error !== UPLOAD_ERR_OK) {
-                $errors[] = "Upload error for $fileName: $error";
-                continue;
-            }
-            
-            // Validate file
-            $imageInfo = getimagesize($tmpName);
-            if (!$imageInfo) {
-                $errors[] = "$fileName is not a valid image";
-                continue;
-            }
-            
-            if ($size > 5 * 1024 * 1024) { // 5MB limit
-                $errors[] = "$fileName is too large (max 5MB)";
-                continue;
-            }
-            
-            // Generate filename
-            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            $newFileName = "product_{$productId}_" . time() . "_" . uniqid() . ".$extension";
-            
-            // Save in different sizes
-            if (saveProductImage($tmpName, $newFileName, $productId)) {
-                $uploadedFiles[] = $newFileName;
-            } else {
-                $errors[] = "Failed to save $fileName";
-            }
-        }
-        
-        // Update database with first uploaded image as main image
-        if (!empty($uploadedFiles)) {
-            $mainImage = $uploadedFiles[0];
-            
-            // Get existing gallery
-            $stmt = $pdo->prepare("SELECT album_hinh_anh FROM san_pham_chinh WHERE id = ?");
-            $stmt->execute([$productId]);
-            $existingGallery = $stmt->fetchColumn();
-            
-            $gallery = [];
-            if ($existingGallery) {
-                $gallery = json_decode($existingGallery, true) ?: [];
-            }
-            
-            // Add new images to gallery (except main)
-            for ($i = 1; $i < count($uploadedFiles); $i++) {
-                $gallery[] = $uploadedFiles[$i];
-            }
-            
-            // Update database
-            $updateStmt = $pdo->prepare("UPDATE san_pham_chinh SET hinh_anh_chinh = ?, album_hinh_anh = ? WHERE id = ?");
-            $updateStmt->execute([$mainImage, json_encode($gallery), $productId]);
-        }
-        
-        return [
-            'success' => true,
-            'uploaded' => $uploadedFiles,
-            'errors' => $errors,
-            'message' => count($uploadedFiles) . ' files uploaded successfully'
-        ];
-        
-    } catch (Exception $e) {
-        return ['success' => false, 'message' => $e->getMessage()];
-    }
-}
-
-function saveProductImage($sourcePath, $fileName, $productId) {
-    global $config;
-    
-    try {
-        // Create main image (800x800)
-        $mainPath = $config['directories']['main'] . '/' . $fileName;
-        if (!resizeImage($sourcePath, $mainPath, 800, 800)) {
-            return false;
-        }
-        
-        // Create thumbnail (300x300)
-        $thumbPath = $config['directories']['thumbnails'] . '/' . $fileName;
-        if (!resizeImage($sourcePath, $thumbPath, 300, 300)) {
-            return false;
-        }
-        
-        // Create gallery image (600x600)
-        $galleryPath = $config['directories']['gallery'] . '/' . $fileName;
-        if (!resizeImage($sourcePath, $galleryPath, 600, 600)) {
-            return false;
-        }
-        
-        return true;
-    } catch (Exception $e) {
-        return false;
-    }
-}
-
-function resizeImage($sourcePath, $targetPath, $width, $height) {
-    $imageInfo = getimagesize($sourcePath);
-    if (!$imageInfo) return false;
-    
-    $sourceWidth = $imageInfo[0];
-    $sourceHeight = $imageInfo[1];
-    $mimeType = $imageInfo['mime'];
-    
-    // Create source image
-    switch ($mimeType) {
-        case 'image/jpeg':
-            $sourceImage = imagecreatefromjpeg($sourcePath);
-            break;
-        case 'image/png':
-            $sourceImage = imagecreatefrompng($sourcePath);
-            break;
-        case 'image/webp':
-            $sourceImage = imagecreatefromwebp($sourcePath);
-            break;
-        default:
-            return false;
-    }
-    
-    if (!$sourceImage) return false;
-    
-    // Calculate new dimensions (maintain aspect ratio)
-    $ratio = min($width / $sourceWidth, $height / $sourceHeight);
-    $newWidth = intval($sourceWidth * $ratio);
-    $newHeight = intval($sourceHeight * $ratio);
-    
-    // Create new image
-    $newImage = imagecreatetruecolor($newWidth, $newHeight);
-    
-    // Handle transparency for PNG
-    if ($mimeType === 'image/png') {
-        imagealphablending($newImage, false);
-        imagesavealpha($newImage, true);
-        $transparent = imagecolorallocatealpha($newImage, 255, 255, 255, 127);
-        imagefill($newImage, 0, 0, $transparent);
-    } else {
-        // White background for other formats
-        $white = imagecolorallocate($newImage, 255, 255, 255);
-        imagefill($newImage, 0, 0, $white);
-    }
-    
-    // Resize
-    imagecopyresampled($newImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $sourceWidth, $sourceHeight);
-    
-    // Save
-    $result = imagejpeg($newImage, $targetPath, 90);
-    
-    // Cleanup
-    imagedestroy($sourceImage);
-    imagedestroy($newImage);
-    
-    return $result;
+    return ['success' => false, 'message' => 'Upload feature coming soon'];
 }
 
 function handleBatchAction() {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!isset($input['operation']) || !isset($input['product_ids'])) {
-        return ['success' => false, 'message' => 'Missing operation or product IDs'];
-    }
-    
-    $operation = $input['operation'];
-    $productIds = $input['product_ids'];
-    
-    switch ($operation) {
-        case 'generate_demo':
-            return batchGenerateDemo($productIds);
-        case 'remove_images':
-            return batchRemoveImages($productIds);
-        case 'optimize':
-            return batchOptimizeImages($productIds);
-        default:
-            return ['success' => false, 'message' => 'Unknown operation'];
-    }
+    return ['success' => false, 'message' => 'Batch action feature coming soon'];
 }
 
 function optimizeImages() {
@@ -624,7 +426,7 @@ function optimizeImages() {
         foreach ($images as $imagePath) {
             $originalSize = filesize($imagePath);
             
-            // Re-save with 85% quality to reduce file size
+            // Re-save with 85% quality
             $image = imagecreatefromjpeg($imagePath);
             if ($image) {
                 if (imagejpeg($image, $imagePath, 85)) {
@@ -648,17 +450,14 @@ function fixMissingImages() {
     global $pdo;
     
     try {
-        // Find products without main images
         $stmt = $pdo->query("SELECT id, ten_san_pham FROM san_pham_chinh WHERE (hinh_anh_chinh IS NULL OR hinh_anh_chinh = '') AND trang_thai = 'hoat_dong'");
         $missingProducts = $stmt->fetchAll();
         
         $fixed = 0;
         
         foreach ($missingProducts as $product) {
-            // Create a simple placeholder image
             $filename = "placeholder_product_{$product['id']}.jpg";
             if (createProductPlaceholder($product['id'], $product['ten_san_pham'], $filename)) {
-                // Update database
                 $updateStmt = $pdo->prepare("UPDATE san_pham_chinh SET hinh_anh_chinh = ? WHERE id = ?");
                 $updateStmt->execute([$filename, $product['id']]);
                 $fixed++;
@@ -824,7 +623,7 @@ function createProductPlaceholder($productId, $productName, $filename) {
         // Product ID
         imagestring($image, 3, 350, 300, "ID: $productId", $textColor);
         
-        // Product name (truncate if too long)
+        // Product name
         $displayName = strlen($productName) > 20 ? substr($productName, 0, 20) . '...' : $productName;
         imagestring($image, 4, 320, 350, $displayName, $accentColor);
         
@@ -878,7 +677,7 @@ function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle =
     $shadow = imagecolorallocatealpha($image, 0, 0, 0, 50);
     imagefilledellipse($image, $centerX + 5, $centerY + 50 * $scale, $width * 0.6, $height * 0.08, $shadow);
     
-    // Draw shoe body with angle
+    // Draw shoe body
     $shoeWidth = $width * 0.6;
     $shoeHeight = $height * 0.3;
     
@@ -886,7 +685,7 @@ function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle =
     $offsetX = sin(deg2rad($angle)) * 20;
     $offsetY = cos(deg2rad($angle)) * 10;
     
-    // Main shoe shape (ellipse with rotation effect)
+    // Main shoe shape
     imagefilledellipse($image, $centerX + $offsetX, $centerY + $offsetY, $shoeWidth, $shoeHeight, $shoeColor);
     
     // Shoe sole
@@ -896,14 +695,14 @@ function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle =
     // Shoe details
     $detailColor = $colorHex === '#FFFFFF' ? imagecolorallocate($image, 200, 200, 200) : imagecolorallocate($image, 255, 255, 255);
     
-    // Laces (small circles)
+    // Laces
     for ($i = 0; $i < 4; $i++) {
         $laceX = $centerX - 40 * $scale + ($i * 20 * $scale) + $offsetX;
         $laceY = $centerY - 30 * $scale + $offsetY;
         imagefilledellipse($image, $laceX, $laceY, 6 * $scale, 6 * $scale, $detailColor);
     }
     
-    // Brand swoosh/logo
+    // Brand logo
     $logoX = $centerX + 30 * $scale + $offsetX;
     $logoY = $centerY - 10 * $scale + $offsetY;
     imagearc($image, $logoX, $logoY, 40 * $scale, 20 * $scale, 0, 180, $detailColor);
@@ -912,7 +711,7 @@ function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle =
     $textColor = imagecolorallocate($image, 80, 80, 80);
     $brandColor = imagecolorallocate($image, 0, 123, 255);
     
-    // Font sizes based on image size
+    // Font sizes
     $brandFontSize = max(2, $width / 60);
     $nameFontSize = max(3, $width / 40);
     
@@ -921,7 +720,7 @@ function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle =
     $brandX = ($width - $brandWidth) / 2;
     imagestring($image, $brandFontSize, $brandX, $height - 60, $brand, $brandColor);
     
-    // Product name (truncate if needed)
+    // Product name
     $displayName = strlen($name) > 25 ? substr($name, 0, 25) . '...' : $name;
     $nameWidth = strlen($displayName) * imagefontwidth($nameFontSize);
     $nameX = ($width - $nameWidth) / 2;
@@ -960,7 +759,6 @@ function calculateDirectorySize($dir) {
                 $size += $file->getSize();
             }
         } catch (Exception $e) {
-            // Handle permission errors
             return 0;
         }
     }
@@ -976,157 +774,6 @@ function formatBytes($size, $precision = 2) {
     return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
 }
 
-function batchGenerateDemo($productIds) {
-    global $pdo;
-    
-    $generated = 0;
-    $colors = ['#000000', '#FFFFFF', '#FF0000', '#0000FF', '#008000'];
-    
-    foreach ($productIds as $productId) {
-        try {
-            $stmt = $pdo->prepare("SELECT ten_san_pham, thuong_hieu FROM san_pham_chinh WHERE id = ?");
-            $stmt->execute([$productId]);
-            $product = $stmt->fetch();
-            
-            if ($product) {
-                $filename = "demo_product_{$productId}.jpg";
-                $color = $colors[array_rand($colors)];
-                $brand = $product['thuong_hieu'] ?: 'TKT Shop';
-                
-                if (createProductPlaceholder($productId, $product['ten_san_pham'], $filename)) {
-                    // Update database
-                    $updateStmt = $pdo->prepare("UPDATE san_pham_chinh SET hinh_anh_chinh = ? WHERE id = ?");
-                    $updateStmt->execute([$filename, $productId]);
-                    $generated++;
-                }
-            }
-        } catch (Exception $e) {
-            continue;
-        }
-    }
-    
-    return [
-        'success' => true,
-        'generated' => $generated,
-        'message' => "Generated demo images for $generated products"
-    ];
-}
-
-function batchRemoveImages($productIds) {
-    global $pdo, $config;
-    
-    $removed = 0;
-    
-    foreach ($productIds as $productId) {
-        try {
-            $stmt = $pdo->prepare("SELECT hinh_anh_chinh, album_hinh_anh FROM san_pham_chinh WHERE id = ?");
-            $stmt->execute([$productId]);
-            $product = $stmt->fetch();
-            
-            if ($product) {
-                // Remove main image
-                if ($product['hinh_anh_chinh']) {
-                    $dirs = ['main', 'gallery', 'thumbnails'];
-                    foreach ($dirs as $dir) {
-                        $path = $config['directories'][$dir] . '/' . $product['hinh_anh_chinh'];
-                        if (file_exists($path)) {
-                            unlink($path);
-                        }
-                    }
-                }
-                
-                // Remove gallery images
-                if ($product['album_hinh_anh']) {
-                    $gallery = json_decode($product['album_hinh_anh'], true);
-                    if (is_array($gallery)) {
-                        foreach ($gallery as $image) {
-                            $dirs = ['main', 'gallery', 'thumbnails'];
-                            foreach ($dirs as $dir) {
-                                $path = $config['directories'][$dir] . '/' . $image;
-                                if (file_exists($path)) {
-                                    unlink($path);
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Update database
-                $updateStmt = $pdo->prepare("UPDATE san_pham_chinh SET hinh_anh_chinh = NULL, album_hinh_anh = NULL WHERE id = ?");
-                $updateStmt->execute([$productId]);
-                $removed++;
-            }
-        } catch (Exception $e) {
-            continue;
-        }
-    }
-    
-    return [
-        'success' => true,
-        'removed' => $removed,
-        'message' => "Removed images for $removed products"
-    ];
-}
-
-function batchOptimizeImages($productIds) {
-    global $pdo, $config;
-    
-    $optimized = 0;
-    $spaceSaved = 0;
-    
-    foreach ($productIds as $productId) {
-        try {
-            $stmt = $pdo->prepare("SELECT hinh_anh_chinh, album_hinh_anh FROM san_pham_chinh WHERE id = ?");
-            $stmt->execute([$productId]);
-            $product = $stmt->fetch();
-            
-            if ($product) {
-                $images = [];
-                
-                if ($product['hinh_anh_chinh']) {
-                    $images[] = $product['hinh_anh_chinh'];
-                }
-                
-                if ($product['album_hinh_anh']) {
-                    $gallery = json_decode($product['album_hinh_anh'], true);
-                    if (is_array($gallery)) {
-                        $images = array_merge($images, $gallery);
-                    }
-                }
-                
-                foreach ($images as $image) {
-                    $dirs = ['main', 'gallery', 'thumbnails'];
-                    foreach ($dirs as $dir) {
-                        $path = $config['directories'][$dir] . '/' . $image;
-                        if (file_exists($path) && pathinfo($path, PATHINFO_EXTENSION) === 'jpg') {
-                            $originalSize = filesize($path);
-                            
-                            $img = imagecreatefromjpeg($path);
-                            if ($img) {
-                                if (imagejpeg($img, $path, 85)) {
-                                    $newSize = filesize($path);
-                                    $spaceSaved += ($originalSize - $newSize);
-                                    $optimized++;
-                                }
-                                imagedestroy($img);
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception $e) {
-            continue;
-        }
-    }
-    
-    return [
-        'success' => true,
-        'optimized' => $optimized,
-        'space_saved' => formatBytes($spaceSaved),
-        'message' => "Optimized $optimized images, saved " . formatBytes($spaceSaved)
-    ];
-}
-
 // Auto-create basic structure on first run
 if (!is_dir(__DIR__ . '/uploads')) {
     createDirectoriesStructure();
@@ -1134,55 +781,15 @@ if (!is_dir(__DIR__ . '/uploads')) {
 
 // Check if GD extension is loaded
 if (!extension_loaded('gd')) {
-    echo "<div class='alert alert-danger'>❌ GD Extension không được cài đặt. Một số tính năng sẽ không hoạt động.</div>";
+    $gd_error = "❌ GD Extension không được cài đặt. Một số tính năng sẽ không hoạt động.";
 }
 
 // Check write permissions
 if (!is_writable(__DIR__)) {
-    echo "<div class='alert alert-warning'>⚠️ Thư mục không có quyền ghi. Vui lòng chmod 755 hoặc 777.</div>";
+    $permission_error = "⚠️ Thư mục không có quyền ghi. Vui lòng chmod 755 hoặc 777.";
 }
-?><?php
-/**
- * TKT SHOP - IMAGE DEBUG SYSTEM
- * File: debug_images.php
- * Chức năng: Kiểm tra toàn bộ hệ thống ảnh, tạo thư mục, báo cáo thiếu ảnh
- */
-
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-// Include database connection
-require_once 'config/database.php';
-
-// Cấu hình đường dẫn
-define('BASE_PATH', __DIR__);
-define('UPLOAD_BASE', BASE_PATH . '/uploads');
-define('WEB_BASE', '/tktshop');
-
-$config = [
-    'directories' => [
-        'uploads' => UPLOAD_BASE,
-        'products' => UPLOAD_BASE . '/products',
-        'main' => UPLOAD_BASE . '/products/main',
-        'gallery' => UPLOAD_BASE . '/products/gallery', 
-        'thumbnails' => UPLOAD_BASE . '/products/thumbnails',
-        'categories' => UPLOAD_BASE . '/categories',
-        'users' => UPLOAD_BASE . '/users',
-        'reviews' => UPLOAD_BASE . '/reviews',
-        'delivery' => UPLOAD_BASE . '/delivery',
-        'brands' => UPLOAD_BASE . '/brands',
-        'temp' => UPLOAD_BASE . '/temp',
-        'assets' => BASE_PATH . '/assets/images'
-    ],
-    'image_types' => ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-    'required_files' => [
-        'assets/images/no-image.jpg',
-        'assets/images/logo.png',
-        'assets/images/placeholder.png'
-    ]
-];
-
 ?>
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -1275,6 +882,27 @@ $config = [
             border-radius: 5px;
             margin: 5px;
         }
+
+        @media (max-width: 768px) {
+            .action-buttons .btn-group {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .action-buttons .btn {
+                margin-bottom: 5px;
+                width: 100%;
+            }
+            
+            .product-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .debug-header h1 {
+                font-size: 1.5rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1286,6 +914,15 @@ $config = [
     </div>
 
     <div class="container-fluid">
+        <!-- Error notifications -->
+        <?php if (isset($gd_error)): ?>
+            <div class="alert alert-danger"><?= $gd_error ?></div>
+        <?php endif; ?>
+        
+        <?php if (isset($permission_error)): ?>
+            <div class="alert alert-warning"><?= $permission_error ?></div>
+        <?php endif; ?>
+
         <!-- Action Buttons -->
         <div class="action-buttons">
             <div class="row">
@@ -1315,19 +952,39 @@ $config = [
                     </div>
                 </div>
             </div>
+            
+            <!-- Additional buttons -->
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-primary" onclick="fixMissingImages()">
+                            <i class="fas fa-wrench"></i> Fix thiếu ảnh
+                        </button>
+                        <button class="btn btn-outline-success" onclick="optimizeImages()">
+                            <i class="fas fa-compress"></i> Tối ưu ảnh
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="cleanupOrphaned()">
+                            <i class="fas fa-broom"></i> Dọn ảnh thừa
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="row">
             <!-- Left Column: Statistics -->
             <div class="col-lg-4">
                 <div id="systemStats">
-                    <!-- System statistics will be loaded here -->
+                    <div class="stat-card">
+                        <h5><i class="fas fa-info-circle"></i> Trạng thái</h5>
+                        <p>Click "Kiểm tra hệ thống" để bắt đầu</p>
+                    </div>
                 </div>
                 
                 <div class="stat-card">
                     <h5><i class="fas fa-folder-tree"></i> Cấu trúc thư mục</h5>
                     <div id="directoryStructure" class="file-tree">
-                        <!-- Directory structure will be loaded here -->
+                        Đang tải...
                     </div>
                 </div>
             </div>
@@ -1363,7 +1020,10 @@ $config = [
                     </div>
                     <div class="card-body">
                         <div id="productsGrid" class="product-grid">
-                            <!-- Products will be loaded here -->
+                            <div class="text-center py-4">
+                                <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                                <p class="text-muted mt-2">Đang tải sản phẩm...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1412,14 +1072,18 @@ $config = [
             fetch('debug_images.php?action=check_system')
                 .then(response => response.json())
                 .then(data => {
-                    updateSystemStats(data.stats);
-                    updateDirectoryStructure(data.directories);
-                    loadProducts();
-                    
-                    document.getElementById('lastUpdate').textContent = 
-                        'Cập nhật lúc: ' + new Date().toLocaleTimeString();
-                    
-                    addLog(`✅ Kiểm tra hoàn tất: ${data.stats.total_products} sản phẩm, ${data.stats.missing_images} thiếu ảnh`, 'success');
+                    if (data.success) {
+                        updateSystemStats(data.stats);
+                        updateDirectoryStructure(data.directories);
+                        loadProducts();
+                        
+                        document.getElementById('lastUpdate').textContent = 
+                            'Cập nhật lúc: ' + new Date().toLocaleTimeString();
+                        
+                        addLog(`✅ Kiểm tra hoàn tất: ${data.stats.total_products} sản phẩm, ${data.stats.missing_images} thiếu ảnh`, 'success');
+                    } else {
+                        addLog('❌ Lỗi: ' + data.error, 'error');
+                    }
                 })
                 .catch(error => {
                     addLog('❌ Lỗi kiểm tra hệ thống: ' + error.message, 'error');
@@ -1432,15 +1096,25 @@ $config = [
             fetch('debug_images.php?action=create_directories')
                 .then(response => response.json())
                 .then(data => {
-                    data.created.forEach(dir => {
-                        addLog(`✅ Tạo thành công: ${dir}`, 'success');
-                    });
-                    
-                    data.existing.forEach(dir => {
-                        addLog(`ℹ️ Đã tồn tại: ${dir}`, 'info');
-                    });
-                    
-                    checkSystem(); // Refresh after creation
+                    if (data.success) {
+                        data.created.forEach(dir => {
+                            addLog(`✅ Tạo thành công: ${dir}`, 'success');
+                        });
+                        
+                        data.existing.forEach(dir => {
+                            addLog(`ℹ️ Đã tồn tại: ${dir}`, 'info');
+                        });
+                        
+                        if (data.errors.length > 0) {
+                            data.errors.forEach(error => {
+                                addLog(`❌ ${error}`, 'error');
+                            });
+                        }
+                        
+                        checkSystem(); // Refresh after creation
+                    } else {
+                        addLog('❌ Lỗi tạo thư mục', 'error');
+                    }
                 })
                 .catch(error => {
                     addLog('❌ Lỗi tạo thư mục: ' + error.message, 'error');
@@ -1480,6 +1154,10 @@ $config = [
                                         progressContainer.remove();
                                         checkSystem();
                                         addLog(`🎉 Hoàn thành tạo ${data.created.length} ảnh demo!`, 'success');
+                                        
+                                        if (data.sql_updates.length > 0) {
+                                            addLog(`📝 Cập nhật database: ${data.sql_updates.length} sản phẩm`, 'info');
+                                        }
                                     }, 500);
                                 }
                             }, index * 100);
@@ -1501,20 +1179,27 @@ $config = [
             fetch('debug_images.php?action=analyze_database')
                 .then(response => response.json())
                 .then(data => {
-                    addLog(`📊 Tổng ${data.total_products} sản phẩm trong DB`, 'info');
-                    addLog(`📸 ${data.products_with_main_image} có ảnh chính`, 'info');
-                    addLog(`🖼️ ${data.products_with_gallery} có album ảnh`, 'info');
-                    addLog(`❌ ${data.missing_main_image} thiếu ảnh chính`, 'warning');
-                    
-                    if (data.orphaned_images.length > 0) {
-                        addLog(`🗑️ ${data.orphaned_images.length} ảnh không dùng đến`, 'warning');
-                    }
-                    
-                    if (data.missing_files.length > 0) {
-                        addLog(`📁 ${data.missing_files.length} file ảnh bị mất`, 'error');
-                        data.missing_files.forEach(file => {
-                            addLog(`   - ${file}`, 'error');
-                        });
+                    if (data.success) {
+                        addLog(`📊 Tổng ${data.total_products} sản phẩm trong DB`, 'info');
+                        addLog(`📸 ${data.products_with_main_image} có ảnh chính`, 'info');
+                        addLog(`🖼️ ${data.products_with_gallery} có album ảnh`, 'info');
+                        addLog(`❌ ${data.missing_main_image} thiếu ảnh chính`, 'warning');
+                        
+                        if (data.orphaned_images.length > 0) {
+                            addLog(`🗑️ ${data.orphaned_images.length} ảnh không dùng đến`, 'warning');
+                        }
+                        
+                        if (data.missing_files.length > 0) {
+                            addLog(`📁 ${data.missing_files.length} file ảnh bị mất`, 'error');
+                            data.missing_files.slice(0, 5).forEach(file => {
+                                addLog(`   - ${file}`, 'error');
+                            });
+                            if (data.missing_files.length > 5) {
+                                addLog(`   ... và ${data.missing_files.length - 5} file khác`, 'error');
+                            }
+                        }
+                    } else {
+                        addLog('❌ Lỗi: ' + data.error, 'error');
                     }
                 })
                 .catch(error => {
@@ -1526,7 +1211,11 @@ $config = [
             fetch('debug_images.php?action=get_products')
                 .then(response => response.json())
                 .then(data => {
-                    displayProducts(data.products);
+                    if (data.success) {
+                        displayProducts(data.products);
+                    } else {
+                        addLog('❌ Lỗi load sản phẩm: ' + data.error, 'error');
+                    }
                 })
                 .catch(error => {
                     addLog('❌ Lỗi load sản phẩm: ' + error.message, 'error');
@@ -1536,6 +1225,11 @@ $config = [
         function displayProducts(products) {
             const grid = document.getElementById('productsGrid');
             grid.innerHTML = '';
+            
+            if (products.length === 0) {
+                grid.innerHTML = '<div class="text-center py-4"><p class="text-muted">Không có sản phẩm nào</p></div>';
+                return;
+            }
             
             products.forEach(product => {
                 const card = createProductCard(product);
@@ -1554,7 +1248,7 @@ $config = [
                 `<div class="no-image"><i class="fas fa-image fa-2x"></i><br>Chưa có ảnh</div>`;
             
             const statusBadge = getStatusBadge(product.image_status);
-            const galleryCount = product.gallery_images ? JSON.parse(product.gallery_images).length : 0;
+            const galleryCount = product.gallery_images ? JSON.parse(product.gallery_images || '[]').length : 0;
             
             card.innerHTML = `
                 ${imageSection}
@@ -1576,7 +1270,7 @@ $config = [
                         <button class="btn btn-sm btn-primary" onclick="uploadImage(${product.id})">
                             <i class="fas fa-upload"></i> Upload
                         </button>
-                        <button class="btn btn-sm btn-outline-info" onclick="viewProduct(${product.id})">
+                        <button class="btn btn-sm btn-outline-info" onclick="viewProduct('${product.id}')">
                             <i class="fas fa-eye"></i> Xem
                         </button>
                     </div>
@@ -1663,8 +1357,9 @@ $config = [
             
             Object.entries(directories).forEach(([name, info]) => {
                 const icon = info.exists ? '📁' : '❌';
+                const writable = info.exists ? (info.writable ? '✅' : '🔒') : '';
                 const size = info.exists ? ` (${info.file_count} files)` : ' (missing)';
-                structure += `├── ${icon} ${name}${size}\n`;
+                structure += `├── ${icon} ${name}${size} ${writable}\n`;
             });
             
             container.textContent = structure;
@@ -1679,711 +1374,61 @@ $config = [
             // Open product detail page
             window.open(`customer/product_detail.php?id=${productId}`, '_blank');
         }
+
+        function fixMissingImages() {
+            addLog('🔧 Sửa ảnh bị thiếu...', 'info');
+            
+            fetch('debug_images.php?action=fix_missing_images')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog(`✅ ${data.message}`, 'success');
+                        checkSystem();
+                    } else {
+                        addLog(`❌ Lỗi: ${data.error}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLog('❌ Lỗi fix ảnh: ' + error.message, 'error');
+                });
+        }
+
+        function optimizeImages() {
+            addLog('⚡ Tối ưu hóa ảnh...', 'info');
+            
+            fetch('debug_images.php?action=optimize_images')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog(`✅ Tối ưu ${data.optimized_count} ảnh`, 'success');
+                        addLog(`💾 Tiết kiệm ${data.space_saved} dung lượng`, 'info');
+                    } else {
+                        addLog(`❌ Lỗi tối ưu: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLog('❌ Lỗi tối ưu: ' + error.message, 'error');
+                });
+        }
+
+        function cleanupOrphaned() {
+            addLog('🧹 Dọn dẹp ảnh thừa...', 'info');
+            
+            fetch('debug_images.php?action=cleanup_orphaned')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog(`✅ Xóa ${data.deleted_count} ảnh thừa`, 'success');
+                        addLog(`💾 Giải phóng ${data.space_saved} dung lượng`, 'info');
+                        checkSystem();
+                    } else {
+                        addLog(`❌ Lỗi: ${data.error}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLog('❌ Lỗi dọn dẹp: ' + error.message, 'error');
+                });
+        }
     </script>
 </body>
 </html>
-
-<?php
-// AJAX Handlers
-if (isset($_GET['action'])) {
-    header('Content-Type: application/json');
-    
-    switch ($_GET['action']) {
-        case 'check_system':
-            echo json_encode(checkSystemStatus());
-            break;
-            
-        case 'create_directories':
-            echo json_encode(createDirectoriesStructure());
-            break;
-            
-        case 'generate_demo_images':
-            echo json_encode(generateDemoImages());
-            break;
-            
-        case 'analyze_database':
-            echo json_encode(analyzeDatabase());
-            break;
-            
-        case 'get_products':
-            echo json_encode(getProductsWithImageStatus());
-            break;
-            
-        default:
-            echo json_encode(['error' => 'Invalid action']);
-    }
-    exit;
-}
-
-function checkSystemStatus() {
-    global $config, $pdo;
-    
-    // Check directories
-    $directories = [];
-    $total_directories = 0;
-    $directories_exist = true;
-    
-    foreach ($config['directories'] as $name => $path) {
-        $exists = is_dir($path);
-        $file_count = 0;
-        
-        if ($exists) {
-            $files = glob($path . '/*');
-            $file_count = is_array($files) ? count($files) : 0;
-        } else {
-            $directories_exist = false;
-        }
-        
-        $directories[$name] = [
-            'exists' => $exists,
-            'path' => $path,
-            'file_count' => $file_count
-        ];
-        $total_directories++;
-    }
-    
-    // Check products and images
-    $stmt = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh");
-    $total_products = $stmt->fetchColumn();
-    
-    $stmt = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh WHERE hinh_anh_chinh IS NOT NULL AND hinh_anh_chinh != ''");
-    $products_with_images = $stmt->fetchColumn();
-    
-    $missing_main_image = $total_products - $products_with_main_image;
-    
-    // Check for orphaned images (images not referenced in database)
-    $orphaned_images = [];
-    $missing_files = [];
-    
-    // Get all images from database
-    $stmt = $pdo->query("SELECT hinh_anh_chinh, album_hinh_anh FROM san_pham_chinh WHERE hinh_anh_chinh IS NOT NULL OR album_hinh_anh IS NOT NULL");
-    $db_images = [];
-    
-    while ($row = $stmt->fetch()) {
-        if ($row['hinh_anh_chinh']) {
-            $db_images[] = $row['hinh_anh_chinh'];
-        }
-        if ($row['album_hinh_anh']) {
-            $gallery = json_decode($row['album_hinh_anh'], true);
-            if (is_array($gallery)) {
-                $db_images = array_merge($db_images, $gallery);
-            }
-        }
-    }
-    
-    // Get all physical images
-    $physical_images = [];
-    $image_dirs = ['main', 'gallery', 'thumbnails'];
-    
-    foreach ($image_dirs as $dir) {
-        $path = __DIR__ . "/uploads/products/$dir";
-        if (is_dir($path)) {
-            $files = glob($path . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE);
-            foreach ($files as $file) {
-                $physical_images[] = basename($file);
-            }
-        }
-    }
-    
-    // Find orphaned images (in filesystem but not in database)
-    $orphaned_images = array_diff($physical_images, $db_images);
-    
-    // Find missing files (in database but not in filesystem)
-    $missing_files = array_diff($db_images, $physical_images);
-    
-    return [
-        'total_products' => $total_products,
-        'products_with_main_image' => $products_with_main_image,
-        'products_with_gallery' => $products_with_gallery,
-        'missing_main_image' => $missing_main_image,
-        'orphaned_images' => array_values($orphaned_images),
-        'missing_files' => array_values($missing_files)
-    ];
-}
-
-function getProductsWithImageStatus() {
-    global $pdo;
-    
-    $stmt = $pdo->query("
-        SELECT 
-            id, 
-            ten_san_pham, 
-            thuong_hieu,
-            hinh_anh_chinh,
-            album_hinh_anh,
-            CASE 
-                WHEN hinh_anh_chinh IS NOT NULL AND hinh_anh_chinh != '' AND 
-                     album_hinh_anh IS NOT NULL AND album_hinh_anh != '' AND album_hinh_anh != '[]' 
-                THEN 'complete'
-                WHEN hinh_anh_chinh IS NOT NULL AND hinh_anh_chinh != '' 
-                THEN 'partial'
-                ELSE 'missing'
-            END as image_status
-        FROM san_pham_chinh 
-        ORDER BY 
-            CASE 
-                WHEN hinh_anh_chinh IS NULL OR hinh_anh_chinh = '' THEN 0
-                WHEN album_hinh_anh IS NULL OR album_hinh_anh = '' OR album_hinh_anh = '[]' THEN 1
-                ELSE 2
-            END,
-            id
-    ");
-    
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Add additional image info
-    foreach ($products as &$product) {
-        $product['main_image'] = $product['hinh_anh_chinh'];
-        $product['gallery_images'] = $product['album_hinh_anh'];
-        
-        // Check if main image file actually exists
-        if ($product['main_image']) {
-            $main_path = __DIR__ . "/uploads/products/main/" . $product['main_image'];
-            if (!file_exists($main_path)) {
-                $product['image_status'] = 'missing';
-                $product['main_image_exists'] = false;
-            } else {
-                $product['main_image_exists'] = true;
-            }
-        }
-    }
-    
-    return ['products' => $products];
-}
-
-function createRequiredFiles() {
-    $files = [
-        'assets/images/no-image.jpg' => [400, 400, 'No Image Available'],
-        'assets/images/placeholder.png' => [300, 300, 'Placeholder'],
-        'assets/images/logo.png' => [200, 80, 'TKT SHOP']
-    ];
-    
-    foreach ($files as $path => [$width, $height, $text]) {
-        $fullPath = __DIR__ . '/' . $path;
-        $dir = dirname($fullPath);
-        
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        
-        if (!file_exists($fullPath)) {
-            createPlaceholderImage($fullPath, $width, $height, $text);
-        }
-    }
-}
-
-function createPlaceholderImage($path, $width, $height, $text) {
-    $image = imagecreatetruecolor($width, $height);
-    
-    // Colors
-    $bg = imagecolorallocate($image, 248, 249, 250);
-    $border = imagecolorallocate($image, 222, 226, 230);
-    $textColor = imagecolorallocate($image, 108, 117, 125);
-    
-    // Fill background
-    imagefill($image, 0, 0, $bg);
-    
-    // Draw border
-    imagerectangle($image, 0, 0, $width-1, $height-1, $border);
-    
-    // Add text
-    $fontSize = max(3, $width / 20);
-    $textX = ($width - strlen($text) * imagefontwidth($fontSize)) / 2;
-    $textY = ($height - imagefontheight($fontSize)) / 2;
-    
-    imagestring($image, $fontSize, $textX, $textY, $text, $textColor);
-    
-    // Add icon
-    $iconSize = min($width, $height) / 8;
-    $iconX = ($width - $iconSize) / 2;
-    $iconY = $textY - $iconSize - 10;
-    
-    // Simple camera icon
-    imagerectangle($image, $iconX, $iconY, $iconX + $iconSize, $iconY + $iconSize * 0.7, $textColor);
-    imagefilledellipse($image, $iconX + $iconSize/2, $iconY + $iconSize * 0.35, $iconSize * 0.4, $iconSize * 0.4, $textColor);
-    
-    // Save image
-    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    switch ($ext) {
-        case 'png':
-            imagepng($image, $path);
-            break;
-        case 'jpg':
-        case 'jpeg':
-        default:
-            imagejpeg($image, $path, 90);
-            break;
-    }
-    
-    imagedestroy($image);
-}
-
-function createDemoShoeImage($width, $height, $name, $brand, $colorHex, $angle = 0) {
-    $image = imagecreatetruecolor($width, $height);
-    
-    // White background
-    $white = imagecolorallocate($image, 255, 255, 255);
-    imagefill($image, 0, 0, $white);
-    
-    // Convert hex to RGB
-    $rgb = hexToRgb($colorHex);
-    $shoeColor = imagecolorallocate($image, $rgb['r'], $rgb['g'], $rgb['b']);
-    
-    // Center coordinates
-    $centerX = $width / 2;
-    $centerY = $height / 2;
-    
-    // Scale based on image size
-    $scale = min($width, $height) / 400;
-    
-    // Draw shadow
-    $shadow = imagecolorallocatealpha($image, 0, 0, 0, 50);
-    imagefilledellipse($image, $centerX + 5, $centerY + 50 * $scale, $width * 0.6, $height * 0.08, $shadow);
-    
-    // Draw shoe body
-    $shoeWidth = $width * 0.6;
-    $shoeHeight = $height * 0.3;
-    
-    // Main shoe shape (ellipse)
-    imagefilledellipse($image, $centerX, $centerY, $shoeWidth, $shoeHeight, $shoeColor);
-    
-    // Shoe sole
-    $soleColor = imagecolorallocate($image, 50, 50, 50);
-    imagefilledellipse($image, $centerX, $centerY + $shoeHeight * 0.35, $shoeWidth * 0.9, $shoeHeight * 0.2, $soleColor);
-    
-    // Shoe details
-    $detailColor = $colorHex === '#FFFFFF' ? imagecolorallocate($image, 200, 200, 200) : imagecolorallocate($image, 255, 255, 255);
-    
-    // Laces (small circles)
-    for ($i = 0; $i < 4; $i++) {
-        $laceX = $centerX - 40 * $scale + ($i * 20 * $scale);
-        $laceY = $centerY - 30 * $scale;
-        imagefilledellipse($image, $laceX, $laceY, 6 * $scale, 6 * $scale, $detailColor);
-    }
-    
-    // Brand swoosh/logo
-    $logoX = $centerX + 30 * $scale;
-    $logoY = $centerY - 10 * $scale;
-    imagearc($image, $logoX, $logoY, 40 * $scale, 20 * $scale, 0, 180, $detailColor);
-    
-    // Add text
-    $textColor = imagecolorallocate($image, 80, 80, 80);
-    $brandColor = imagecolorallocate($image, 0, 123, 255);
-    
-    // Font sizes based on image size
-    $brandFontSize = max(2, $width / 60);
-    $nameFontSize = max(3, $width / 40);
-    
-    // Brand name
-    $brandWidth = strlen($brand) * imagefontwidth($brandFontSize);
-    $brandX = ($width - $brandWidth) / 2;
-    imagestring($image, $brandFontSize, $brandX, $height - 60, $brand, $brandColor);
-    
-    // Product name
-    $nameWidth = strlen($name) * imagefontwidth($nameFontSize);
-    $nameX = ($width - $nameWidth) / 2;
-    imagestring($image, $nameFontSize, $nameX, $height - 40, $name, $textColor);
-    
-    // TKT Shop watermark
-    $watermarkColor = imagecolorallocatealpha($image, 0, 123, 255, 50);
-    imagestring($image, 2, $width - 80, $height - 15, 'TKT SHOP', $watermarkColor);
-    
-    return $image;
-}
-
-function hexToRgb($hex) {
-    $hex = ltrim($hex, '#');
-    
-    if (strlen($hex) == 3) {
-        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-    }
-    
-    return [
-        'r' => hexdec(substr($hex, 0, 2)),
-        'g' => hexdec(substr($hex, 2, 2)),
-        'b' => hexdec(substr($hex, 4, 2))
-    ];
-}
-
-function calculateDirectorySize($dir) {
-    $size = 0;
-    if (is_dir($dir)) {
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)
-        );
-        
-        foreach ($files as $file) {
-            $size += $file->getSize();
-        }
-    }
-    return $size;
-}
-
-function formatBytes($size, $precision = 2) {
-    $base = log($size, 1024);
-    $suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    
-    return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
-}
-
-// Auto-create basic structure on first run
-if (!is_dir(__DIR__ . '/uploads')) {
-    createDirectoriesStructure();
-}
-?>
-
-<!-- Additional CSS for better mobile responsiveness -->
-<style>
-@media (max-width: 768px) {
-    .action-buttons .btn-group {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-    }
-    
-    .action-buttons .btn {
-        margin-bottom: 5px;
-        width: 100%;
-    }
-    
-    .product-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .debug-header h1 {
-        font-size: 1.5rem;
-    }
-}
-
-.upload-zone {
-    border: 2px dashed #007bff;
-    border-radius: 10px;
-    padding: 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s;
-    margin: 10px 0;
-}
-
-.upload-zone:hover {
-    background-color: #f8f9ff;
-    border-color: #0056b3;
-}
-
-.upload-zone.dragover {
-    background-color: #e3f2fd;
-    border-color: #1976d2;
-}
-
-.batch-actions {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 8px;
-    margin: 20px 0;
-}
-
-.image-comparison {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin: 10px 0;
-}
-
-.comparison-item {
-    text-align: center;
-    flex: 1;
-}
-
-.comparison-item img {
-    max-width: 100px;
-    max-height: 100px;
-    border-radius: 5px;
-    border: 1px solid #ddd;
-}
-</style>
-
-<!-- Additional JavaScript for enhanced functionality -->
-<script>
-// Enhanced functionality for the debug system
-
-// Drag and drop upload functionality
-function initDragAndDrop() {
-    document.addEventListener('DOMContentLoaded', function() {
-        const uploadZones = document.querySelectorAll('.upload-zone');
-        
-        uploadZones.forEach(zone => {
-            zone.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                this.classList.add('dragover');
-            });
-            
-            zone.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-            });
-            
-            zone.addEventListener('drop', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-                
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    handleFileUpload(files, this.dataset.productId);
-                }
-            });
-        });
-    });
-}
-
-// Handle file upload
-function handleFileUpload(files, productId) {
-    const formData = new FormData();
-    
-    for (let i = 0; i < files.length; i++) {
-        formData.append('images[]', files[i]);
-    }
-    formData.append('product_id', productId);
-    formData.append('action', 'upload_images');
-    
-    addLog(`📤 Uploading ${files.length} files for product ${productId}...`, 'info');
-    
-    fetch('debug_images.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            addLog(`✅ Upload successful: ${data.uploaded.length} files`, 'success');
-            checkSystem(); // Refresh the display
-        } else {
-            addLog(`❌ Upload failed: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        addLog(`❌ Upload error: ${error.message}`, 'error');
-    });
-}
-
-// Batch operations
-function performBatchAction(action) {
-    const selectedProducts = getSelectedProducts();
-    
-    if (selectedProducts.length === 0) {
-        addLog('⚠️ No products selected', 'warning');
-        return;
-    }
-    
-    addLog(`🔄 Performing ${action} on ${selectedProducts.length} products...`, 'info');
-    
-    fetch('debug_images.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            action: 'batch_action',
-            operation: action,
-            product_ids: selectedProducts
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            addLog(`✅ Batch ${action} completed successfully`, 'success');
-            checkSystem();
-        } else {
-            addLog(`❌ Batch ${action} failed: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        addLog(`❌ Batch operation error: ${error.message}`, 'error');
-    });
-}
-
-function getSelectedProducts() {
-    const checkboxes = document.querySelectorAll('.product-checkbox:checked');
-    return Array.from(checkboxes).map(cb => cb.value);
-}
-
-// Image optimization
-function optimizeImages() {
-    addLog('🔧 Starting image optimization...', 'info');
-    
-    fetch('debug_images.php?action=optimize_images')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                addLog(`✅ Optimized ${data.optimized_count} images`, 'success');
-                addLog(`💾 Saved ${data.space_saved} of storage space`, 'info');
-            } else {
-                addLog(`❌ Optimization failed: ${data.message}`, 'error');
-            }
-        })
-        .catch(error => {
-            addLog(`❌ Optimization error: ${error.message}`, 'error');
-        });
-}
-
-// Export functions for external use
-window.TKTDebug = {
-    checkSystem,
-    createDirectories,
-    generateDemoImages,
-    analyzeDatabase,
-    loadProducts,
-    uploadImage,
-    viewProduct,
-    addLog,
-    clearLog
-};
-
-// Initialize enhanced features
-initDragAndDrop();
-
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey || e.metaKey) {
-        switch(e.key) {
-            case 'r':
-                e.preventDefault();
-                checkSystem();
-                break;
-            case 'd':
-                e.preventDefault();
-                generateDemoImages();
-                break;
-            case 'l':
-                e.preventDefault();
-                clearLog();
-                break;
-        }
-    }
-});
-
-// Add tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Bootstrap tooltips if available
-    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    }
-});
-</script>_images = $total_products - $products_with_images;
-    
-    // Calculate total images
-    $total_images = 0;
-    if (is_dir($config['directories']['main'])) {
-        $images = glob($config['directories']['main'] . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE);
-        $total_images += count($images);
-    }
-    
-    // Calculate total size
-    $total_size = calculateDirectorySize($config['directories']['uploads']);
-    
-    return [
-        'stats' => [
-            'total_products' => $total_products,
-            'complete_products' => $products_with_images,
-            'missing_images' => $missing_images,
-            'total_images' => $total_images,
-            'total_directories' => $total_directories,
-            'directories_exist' => $directories_exist,
-            'total_size' => formatBytes($total_size)
-        ],
-        'directories' => $directories
-    ];
-}
-
-function createDirectoriesStructure() {
-    global $config;
-    
-    $created = [];
-    $existing = [];
-    
-    foreach ($config['directories'] as $name => $path) {
-        if (!is_dir($path)) {
-            if (mkdir($path, 0755, true)) {
-                $created[] = $path;
-            }
-        } else {
-            $existing[] = $path;
-        }
-    }
-    
-    // Create required files
-    createRequiredFiles();
-    
-    return [
-        'created' => $created,
-        'existing' => $existing
-    ];
-}
-
-function generateDemoImages() {
-    global $config;
-    
-    if (!extension_loaded('gd')) {
-        return ['success' => false, 'message' => 'GD Extension không được cài đặt'];
-    }
-    
-    $products = [
-        ['name' => 'Nike Air Max 270', 'brand' => 'Nike', 'color' => '#000000'],
-        ['name' => 'Adidas Ultraboost 22', 'brand' => 'Adidas', 'color' => '#FFFFFF'],
-        ['name' => 'Converse Chuck Taylor', 'brand' => 'Converse', 'color' => '#FF0000'],
-        ['name' => 'Vans Old Skool', 'brand' => 'Vans', 'color' => '#000000'],
-        ['name' => 'Puma RS-X', 'brand' => 'Puma', 'color' => '#0000FF']
-    ];
-    
-    $created = [];
-    
-    foreach ($products as $index => $product) {
-        $filename = "demo_product_" . ($index + 1) . ".jpg";
-        
-        // Create main image
-        $mainImage = createDemoShoeImage(800, 800, $product['name'], $product['brand'], $product['color']);
-        if (imagejpeg($mainImage, $config['directories']['main'] . '/' . $filename, 90)) {
-            $created[] = "main/$filename";
-        }
-        imagedestroy($mainImage);
-        
-        // Create thumbnail
-        $thumbImage = createDemoShoeImage(300, 300, $product['name'], $product['brand'], $product['color']);
-        if (imagejpeg($thumbImage, $config['directories']['thumbnails'] . '/' . $filename, 90)) {
-            $created[] = "thumbnails/$filename";
-        }
-        imagedestroy($thumbImage);
-        
-        // Create gallery images
-        for ($i = 0; $i < 3; $i++) {
-            $galleryFilename = "demo_product_" . ($index + 1) . "_gallery_$i.jpg";
-            $galleryImage = createDemoShoeImage(600, 600, $product['name'], $product['brand'], $product['color'], $i * 15);
-            if (imagejpeg($galleryImage, $config['directories']['gallery'] . '/' . $galleryFilename, 90)) {
-                $created[] = "gallery/$galleryFilename";
-            }
-            imagedestroy($galleryImage);
-        }
-    }
-    
-    return [
-        'success' => true,
-        'created' => $created
-    ];
-}
-
-function analyzeDatabase() {
-    global $pdo;
-    
-    // Get products stats
-    $stmt = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh");
-    $total_products = $stmt->fetchColumn();
-    
-    $stmt = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh WHERE hinh_anh_chinh IS NOT NULL AND hinh_anh_chinh != ''");
-    $products_with_main_image = $stmt->fetchColumn();
-    
-    $stmt = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh WHERE album_hinh_anh IS NOT NULL AND album_hinh_anh != '' AND album_hinh_anh != '[]'");
-    $products_with_gallery = $stmt->fetchColumn();
-    
-    $missing
