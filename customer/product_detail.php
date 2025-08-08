@@ -519,7 +519,7 @@ function getImageUrl($imageName) {
                                  src="<?= getImageUrl($product_images[0]) ?>" 
                                  alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                  class="main-image"
-                                 onerror="this.src='tktshop/uploads/products/'">
+                                 onerror="this.src='tktshop/uploads/products/main/'">
                         <?php else: ?>
                             <div class="no-image-placeholder">
                                 <div class="text-center text-muted">
