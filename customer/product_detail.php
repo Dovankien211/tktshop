@@ -988,7 +988,7 @@ function getImageUrl($imageName) {
                             <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
                                 <div class="card h-100 product-card">
                                     <div class="position-relative">
-                                        <img src="/tktshop/uploads/products/Ultraboost.jpg<?= $related['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
+                                        <img src="/tktshop/uploads/products/Ultraboost.jpg"<?= $related['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
                                              class="card-img-top" 
                                              alt="<?= htmlspecialchars($related['ten_san_pham']) ?>"
                                              style="height: 200px; object-fit: cover;"
