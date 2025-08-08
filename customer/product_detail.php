@@ -549,7 +549,7 @@ $album = json_decode($product['album_hinh_anh'], true);
 if ($album): 
 ?>
     <?php foreach ($album as $index => $image): ?>
-        <img src="/tktshop/uploads/products/gallery/<?= $image ?>" 
+        <img src="tktshop/uploads/products/main/Ultraboost.jpg<?= $image ?>" 
              alt="<?= htmlspecialchars($product['ten_san_pham']) ?> - Ảnh <?= $index + 1 ?>"
              class="thumbnail <?= $index === 0 ? 'active' : '' ?>"
              onclick="changeMainImage('<?= $image ?>', this)"
