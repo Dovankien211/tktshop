@@ -544,13 +544,18 @@ function getImageUrl($imageName) {
                     
                     <?php if (count($product_images) > 1): ?>
                         <div class="thumbnail-images">
-                            <?php foreach ($product_images as $index => $image): ?>
-                                <img src="<?= getImageUrl($image) ?>" 
-                                     alt="<?= htmlspecialchars($product['ten_san_pham']) ?> - Ảnh <?= $index + 1 ?>"
-                                     class="thumbnail <?= $index === 0 ? 'active' : '' ?>"
-                                     onclick="changeMainImage('<?= $image ?>', this)"
-                                     onerror="this.style.display='none'">
-                            <?php endforeach; ?>
+                           <?php 
+$album = json_decode($product['album_hinh_anh'], true);
+if ($album): 
+?>
+    <?php foreach ($album as $index => $image): ?>
+        <img src="/tktshop/uploads/products/gallery/<?= $image ?>" 
+             alt="<?= htmlspecialchars($product['ten_san_pham']) ?> - Ảnh <?= $index + 1 ?>"
+             class="thumbnail <?= $index === 0 ? 'active' : '' ?>"
+             onclick="changeMainImage('<?= $image ?>', this)"
+             onerror="this.style.display='none'">
+    <?php endforeach; ?>
+<?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </div>
