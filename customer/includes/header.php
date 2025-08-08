@@ -39,7 +39,11 @@ if (isset($_SESSION['customer_id'])) {
                 <small>
                     <i class="fas fa-phone me-2"></i>(028) 1234 5678
                     <span class="ms-4">
+<<<<<<< HEAD
                         <i class="fas fa-envelope me-2"></i>info@tktshop.com
+=======
+                        <i class="fas fa-envelope me-2"></i>Dovankien072211@gmail.com
+>>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                     </span>
                 </small>
             </div>

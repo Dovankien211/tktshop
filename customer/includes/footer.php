@@ -110,6 +110,7 @@
                 <div class="text-light">
                     <p class="mb-2">
                         <i class="fas fa-map-marker-alt me-2"></i>
+<<<<<<< HEAD
                         123 Đường ABC, Quận 1<br>
                         <span class="ms-4">TP. Hồ Chí Minh</span>
                     </p>
@@ -117,12 +118,26 @@
                         <i class="fas fa-phone me-2"></i>
                         <a href="tel:02812345678" class="text-light text-decoration-none">
                             (028) 1234 5678
+=======
+                        số nhà 17 ngõ 89 , xã hoài đức, hà nội<br>
+                        <span class="ms-4">TP. Hà Nội</span>
+                    </p>
+                    <p class="mb-2">
+                        <i class="fas fa-phone me-2"></i>
+                        <a href="tel:0866792996" class="text-light text-decoration-none">
+                            (0866) 792996
+>>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                         </a>
                     </p>
                     <p class="mb-2">
                         <i class="fas fa-envelope me-2"></i>
+<<<<<<< HEAD
                         <a href="mailto:info@tktshop.com" class="text-light text-decoration-none">
                             info@tktshop.com
+=======
+                        <a href="mailto:Dovankien072211@gmail.com" class="text-light text-decoration-none">
+                            Dovankien072211@gmail.com
+>>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                         </a>
                     </p>
                     <p class="mb-0">

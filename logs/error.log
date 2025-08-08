@@ -133,3 +133,12 @@
 2025-08-07 08:41:20 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\create_payment.php on line 13
 2025-08-07 08:41:56 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 11
 2025-08-07 08:41:56 - Error [2]: Undefined array key "tong_tien" in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 350
+<<<<<<< HEAD
+=======
+2025-08-07 12:23:52 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\create_payment.php on line 13
+2025-08-07 12:24:19 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 11
+2025-08-07 12:24:19 - Error [2]: Undefined array key "tong_tien" in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 350
+2025-08-07 12:25:55 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\create_payment.php on line 13
+2025-08-07 12:41:05 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 11
+2025-08-07 12:41:05 - Error [2]: Undefined array key "tong_tien" in D:\Hocweb\laragon\www\tktshop\vnpay\return.php on line 350
+>>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
