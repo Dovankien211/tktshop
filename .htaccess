@@ -1,0 +1,83 @@
+# File: .htaccess (trong thư mục tktshop/)
+RewriteEngine On
+
+# Set base path for subdirectory
+RewriteBase /tktshop/
+
+# Security headers
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options DENY
+Header always set X-XSS-Protection "1; mode=block"
+
+# Prevent access to sensitive files
+<Files "*.sql">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files ".htaccess">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Prevent directory browsing
+Options -Indexes
+
+# ================================
+# ADMIN ROUTES
+# ================================
+
+# Admin root redirect to dashboard
+RewriteRule ^admin/?$ admin/dashboard.php [L]
+
+# Admin auth
+RewriteRule ^admin/login/?$ admin/login.php [L]
+RewriteRule ^admin/logout/?$ admin/logout.php [L]
+
+# Admin modules - auto load index.php
+RewriteRule ^admin/(users|categories|sizes|colors|products|reviews|orders)/?$ admin/$1/index.php [L]
+
+# Admin specific pages with parameters
+RewriteRule ^admin/(users|categories|sizes|colors|products|reviews|orders)/(create|edit|variants|detail|update_status)/?$ admin/$1/$2.php [L,QSA]
+
+# ================================
+# CUSTOMER ROUTES (for future)
+# ================================
+
+# Customer root - homepage  
+RewriteRule ^/?$ customer/index.php [L]
+
+# Customer pages
+RewriteRule ^login/?$ customer/login.php [L]
+RewriteRule ^register/?$ customer/register.php [L]
+RewriteRule ^products/?$ customer/products.php [L,QSA]
+RewriteRule ^cart/?$ customer/cart.php [L]
+
+# ================================
+# STATIC FILES
+# ================================
+
+# Handle static files normally
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ - [L]
+
+# Upload files
+RewriteCond %{REQUEST_URI} ^/tktshop/uploads/
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule \.(jpg|jpeg|png|gif|webp)$ - [L]
+
+# ================================
+# FALLBACK
+# ================================
+
+# If file exists, serve it
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# If directory exists and has index.php, serve it
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteCond %{REQUEST_FILENAME}/index.php -f
+RewriteRule ^(.*)$ $1/index.php [L]
+
+# 404 for everything else
+RewriteRule ^.*$ 404.php [L]
