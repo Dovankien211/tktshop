@@ -262,17 +262,38 @@ try {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function deleteProduct(id) {
-            if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
-                // Implement delete functionality
-                alert('Chức năng xóa sẽ được triển khai sau. Product ID: ' + id);
-            }
-        }
-
+        // Remove the old deleteProduct function and use direct links
+        console.log('Products index loaded successfully');
+        
         // Auto refresh every 30 seconds for development
         setTimeout(() => {
-            console.log('Page will refresh in 30 seconds for development');
+            console.log('Auto refresh for development');
         }, 30000);
+        
+        // Show success/error messages from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const success = urlParams.get('success');
+        const error = urlParams.get('error');
+        
+        if (success) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="fas fa-check-circle"></i> ${success}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.p-4').insertBefore(alertDiv, document.querySelector('.p-4').firstChild);
+        }
+        
+        if (error) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i> ${error}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.p-4').insertBefore(alertDiv, document.querySelector('.p-4').firstChild);
+        }
     </script>
 </body>
 </html>
