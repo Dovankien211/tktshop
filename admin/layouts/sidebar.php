@@ -1,17 +1,19 @@
 <?php
-// admin/layouts/sidebar.php - COMPLETE REWRITE
+// admin/layouts/sidebar.php - ĐÃ SỬA LỖI ĐƯỜNG DẪN
 /**
- * Admin Sidebar Navigation - Hoàn toàn mới với dropdown menu
+ * Admin Sidebar Navigation - Đã sửa tất cả lỗi đường dẫn
  */
 
 // Lấy current page để highlight active menu
 $current_page = $_SERVER['REQUEST_URI'];
-$base_url = '/tktshop';
 
 function isActiveMenu($path) {
     global $current_page;
     return strpos($current_page, $path) !== false ? 'active' : '';
 }
+
+// Xác định base path cho admin
+$admin_base = '/tktshop/admin';
 ?>
 
 <style>
@@ -72,6 +74,7 @@ function isActiveMenu($path) {
     background: rgba(52, 73, 94, 0.7);
     color: #3498db;
     transform: translateX(5px);
+    text-decoration: none;
 }
 
 .menu-link.active {
@@ -129,6 +132,7 @@ function isActiveMenu($path) {
     background: rgba(52, 152, 219, 0.2);
     color: #3498db;
     transform: translateX(3px);
+    text-decoration: none;
 }
 
 .submenu-link.active {
@@ -213,7 +217,7 @@ function isActiveMenu($path) {
 <div class="admin-sidebar d-flex flex-column">
     <!-- Header -->
     <div class="sidebar-header">
-        <a href="<?= $base_url ?>/admin/dashboard.php" class="sidebar-brand">
+        <a href="<?= $admin_base ?>/dashboard.php" class="sidebar-brand">
             <i class="fas fa-store me-2"></i>
             TKT Shop Admin
         </a>
@@ -224,7 +228,7 @@ function isActiveMenu($path) {
         <!-- Dashboard -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="<?= $base_url ?>/admin/dashboard.php" 
+                <a href="<?= $admin_base ?>/dashboard.php" 
                    class="menu-link <?= isActiveMenu('/admin/dashboard.php') ?>">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-tachometer-alt menu-icon"></i>
@@ -248,15 +252,15 @@ function isActiveMenu($path) {
                 </a>
             </div>
             <div id="products-menu" class="submenu <?= isActiveMenu('/admin/products/') ? 'show' : '' ?>">
-                <a href="<?= $base_url ?>/admin/products/index.php" 
+                <a href="<?= $admin_base ?>/products/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/products/index.php') ?>">
                     <i class="fas fa-list me-2"></i>Danh sách sản phẩm
                 </a>
-                <a href="<?= $base_url ?>/admin/products/create.php" 
+                <a href="<?= $admin_base ?>/products/create.php" 
                    class="submenu-link <?= isActiveMenu('/admin/products/create.php') ?>">
                     <i class="fas fa-plus me-2"></i>Thêm sản phẩm
                 </a>
-                <a href="<?= $base_url ?>/admin/products/variants.php" 
+                <a href="<?= $admin_base ?>/products/variants.php" 
                    class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
                     <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
                 </a>
@@ -275,15 +279,15 @@ function isActiveMenu($path) {
                 </a>
             </div>
             <div id="categories-menu" class="submenu <?= isActiveMenu('/admin/categories/') || isActiveMenu('/admin/sizes/') || isActiveMenu('/admin/colors/') ? 'show' : '' ?>">
-                <a href="<?= $base_url ?>/admin/categories/index.php" 
+                <a href="<?= $admin_base ?>/categories/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/categories/') ?>">
                     <i class="fas fa-folder me-2"></i>Danh mục
                 </a>
-                <a href="<?= $base_url ?>/admin/sizes/index.php" 
+                <a href="<?= $admin_base ?>/sizes/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/sizes/') ?>">
                     <i class="fas fa-ruler me-2"></i>Kích cỡ
                 </a>
-                <a href="<?= $base_url ?>/admin/colors/index.php" 
+                <a href="<?= $admin_base ?>/colors/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/colors/') ?>">
                     <i class="fas fa-palette me-2"></i>Màu sắc
                 </a>
@@ -304,19 +308,19 @@ function isActiveMenu($path) {
                 </a>
             </div>
             <div id="orders-menu" class="submenu <?= isActiveMenu('/admin/orders/') || isActiveMenu('/admin/cod/') || isActiveMenu('/admin/shipping/') ? 'show' : '' ?>">
-                <a href="<?= $base_url ?>/admin/orders/index.php" 
+                <a href="<?= $admin_base ?>/orders/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/orders/index.php') ?>">
                     <i class="fas fa-list me-2"></i>Tất cả đơn hàng
                 </a>
-                <a href="<?= $base_url ?>/admin/cod/index.php" 
+                <a href="<?= $admin_base ?>/cod/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/cod/') ?>">
                     <i class="fas fa-money-bill-wave me-2"></i>Quản lý COD
                 </a>
-                <a href="<?= $base_url ?>/admin/shipping/index.php" 
+                <a href="<?= $admin_base ?>/shipping/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/shipping/index.php') ?>">
                     <i class="fas fa-shipping-fast me-2"></i>Vận chuyển
                 </a>
-                <a href="<?= $base_url ?>/admin/shipping/shippers.php" 
+                <a href="<?= $admin_base ?>/shipping/shippers.php" 
                    class="submenu-link <?= isActiveMenu('/admin/shipping/shippers.php') ?>">
                     <i class="fas fa-motorcycle me-2"></i>Quản lý Shipper
                 </a>
@@ -326,7 +330,7 @@ function isActiveMenu($path) {
         <!-- Quản lý người dùng -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="<?= $base_url ?>/admin/users/index.php" 
+                <a href="<?= $admin_base ?>/users/index.php" 
                    class="menu-link <?= isActiveMenu('/admin/users/') ?>">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-users menu-icon"></i>
@@ -339,7 +343,7 @@ function isActiveMenu($path) {
         <!-- Quản lý đánh giá -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="<?= $base_url ?>/admin/reviews/index.php" 
+                <a href="<?= $admin_base ?>/reviews/index.php" 
                    class="menu-link <?= isActiveMenu('/admin/reviews/') ?>">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-star menu-icon"></i>
@@ -363,10 +367,10 @@ function isActiveMenu($path) {
                 </a>
             </div>
             <div id="reports-menu" class="submenu">
-                <a href="<?= $base_url ?>/admin/cod/reports.php" class="submenu-link">
+                <a href="<?= $admin_base ?>/cod/reports.php" class="submenu-link">
                     <i class="fas fa-chart-bar me-2"></i>Báo cáo COD
                 </a>
-                <a href="<?= $base_url ?>/vnpay/check_status.php" class="submenu-link">
+                <a href="/tktshop/vnpay/check_status.php" class="submenu-link">
                     <i class="fas fa-credit-card me-2"></i>Kiểm tra VNPay
                 </a>
             </div>
@@ -385,7 +389,7 @@ function isActiveMenu($path) {
             </div>
         </div>
         
-        <form method="POST" action="<?= $base_url ?>/admin/logout.php">
+        <form method="POST" action="<?= $admin_base ?>/logout.php">
             <button type="submit" class="logout-btn">
                 <i class="fas fa-sign-out-alt me-2"></i>
                 Đăng xuất
