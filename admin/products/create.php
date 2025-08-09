@@ -320,6 +320,18 @@ $breadcrumbs = [
                                                     Giá gốc <span class="required">*</span>
                                                 </label>
                                                 <div class="input-group">
+                                                    <input type="number" class="form-control" id="gia_goc" name="gia_goc" 
+                                                           value="<?= htmlspecialchars($_POST['gia_goc'] ?? '') ?>" 
+                                                           min="1000" step="1000" required>
+                                                    <span class="input-group-text">₫</span>
+                                                </div>
+                                                <div class="form-text">Giá bán chính thức của sản phẩm</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="gia_khuyen_mai" class="form-label">Giá khuyến mãi</label>
+                                                <div class="input-group">
                                                     <input type="number" class="form-control" id="gia_khuyen_mai" name="gia_khuyen_mai" 
                                                            value="<?= htmlspecialchars($_POST['gia_khuyen_mai'] ?? '') ?>" 
                                                            min="1000" step="1000">
@@ -781,16 +793,4 @@ $breadcrumbs = [
         });
     </script>
 </body>
-</html>_goc" name="gia_goc" 
-                                                           value="<?= htmlspecialchars($_POST['gia_goc'] ?? '') ?>" 
-                                                           min="1000" step="1000" required>
-                                                    <span class="input-group-text">₫</span>
-                                                </div>
-                                                <div class="form-text">Giá bán chính thức của sản phẩm</div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="mb-3">
-                                                <label for="gia_khuyen_mai" class="form-label">Giá khuyến mãi</label>
-                                                <div class="input-group">
-                                                    <input type="number" class="form-control" id="gia
+</html>
