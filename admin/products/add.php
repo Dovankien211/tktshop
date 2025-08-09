@@ -115,28 +115,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $hinh_anh_phu_json = !empty($hinh_anh_phu) ? json_encode($hinh_anh_phu) : null;
         
-        echo "🔍 DEBUG: Validation OK, chuẩn bị insert<br>";
-        
-        // Insert sản phẩm
+        // Insert sản phẩm (chỉ dùng cột có sẵn)
         $sql = "INSERT INTO san_pham_chinh (
                     ma_san_pham, ten_san_pham, slug, thuong_hieu, danh_muc_id,
                     gia_goc, gia_khuyen_mai, mo_ta_ngan, mo_ta_chi_tiet, 
-                    hinh_anh_chinh, hinh_anh_phu, trang_thai,
-                    ngay_tao, ngay_cap_nhat
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                    hinh_anh_chinh, trang_thai, ngay_tao, ngay_cap_nhat
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
         
         $stmt = $pdo->prepare($sql);
         $result = $stmt->execute([
             $ma_san_pham, $ten_san_pham, $slug, $thuong_hieu, $danh_muc_id,
             $gia_goc, $gia_khuyen_mai, $mo_ta_ngan, $mo_ta_chi_tiet,
-            $hinh_anh_chinh, $hinh_anh_phu_json, $trang_thai
+            $hinh_anh_chinh, $trang_thai
         ]);
         
         if ($result) {
             $product_id = $pdo->lastInsertId();
             echo "🔍 DEBUG: Insert thành công! Product ID: $product_id<br>";
             
-            $success = "✅ Thêm sản phẩm thành công! ID: $product_id. Ảnh: " . ($hinh_anh_chinh ? "Có" : "Không có");
+            // Nếu có ảnh phụ, có thể lưu riêng vào bảng khác (tùy chọn)
+            if (!empty($hinh_anh_phu)) {
+                echo "🔍 DEBUG: Có " . count($hinh_anh_phu) . " ảnh phụ (sẽ cần bảng riêng để lưu)<br>";
+            }
+            
+            $success = "✅ Thêm sản phẩm thành công! ID: $product_id. Ảnh chính: " . ($hinh_anh_chinh ? "Có" : "Không có");
             
             // Reset form
             $_POST = [];
