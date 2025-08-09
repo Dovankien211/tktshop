@@ -159,7 +159,7 @@ $page_title = "Thêm sản phẩm mới";
 $breadcrumbs = [
     ['title' => 'Dashboard', 'url' => '../dashboard.php'],
     ['title' => 'Sản phẩm', 'url' => 'index.php'],
-    ['title' => 'Thêm mới', 'url' => 'create.php']
+    ['title' => 'Thêm mới', 'url' => 'add.php']
 ];
 ?>
 
@@ -341,15 +341,6 @@ $breadcrumbs = [
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div class="row">
-                                        <div class="col-12">
-                                            <div class="alert alert-info">
-                                                <i class="fas fa-info-circle"></i>
-                                                <strong>Lưu ý:</strong> Giá của từng biến thể (size, màu) có thể khác nhau và sẽ được thiết lập sau khi tạo sản phẩm.
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
 
                                 <!-- Mô tả sản phẩm -->
@@ -471,9 +462,6 @@ $breadcrumbs = [
                                         </a>
                                     </div>
                                     <div>
-                                        <button type="button" class="btn btn-outline-primary me-2" onclick="previewProduct()">
-                                            <i class="fas fa-eye me-2"></i>Xem trước
-                                        </button>
                                         <button type="submit" class="btn btn-success">
                                             <i class="fas fa-save me-2"></i>Lưu sản phẩm
                                         </button>
@@ -482,29 +470,6 @@ $breadcrumbs = [
                             </div>
                         </div>
                     </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Preview Modal -->
-    <div class="modal fade" id="previewModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-eye me-2"></i>Xem trước sản phẩm
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="previewContent">
-                    <!-- Preview content will be generated here -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="button" class="btn btn-success" onclick="submitForm()">
-                        <i class="fas fa-save me-2"></i>Lưu sản phẩm
-                    </button>
                 </div>
             </div>
         </div>
@@ -532,29 +497,6 @@ $breadcrumbs = [
             previewSubImages(this);
         });
 
-        // Drag and drop for main image
-        const mainUpload = document.getElementById('mainImageUpload');
-        mainUpload.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('dragover');
-        });
-
-        mainUpload.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-        });
-
-        mainUpload.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                document.getElementById('hinh_anh_chinh').files = files;
-                previewMainImage(document.getElementById('hinh_anh_chinh'));
-            }
-        });
-
         // Preview main image
         function previewMainImage(input) {
             const preview = document.getElementById('mainImagePreview');
@@ -576,7 +518,7 @@ $breadcrumbs = [
                         <div class="mt-3">
                             <img src="${e.target.result}" class="image-preview" alt="Preview">
                             <div class="mt-2">
-                                <small class="text-muted">${file.name} (${formatFileSize(file.size)})</small>
+                                <small class="text-muted">${file.name}</small>
                                 <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="removeMainImage()">
                                     <i class="fas fa-times"></i> Xóa
                                 </button>
@@ -612,8 +554,7 @@ $breadcrumbs = [
                         imageDiv.innerHTML = `
                             <img src="${e.target.result}" class="image-preview me-2" style="width: 60px; height: 60px;" alt="Preview">
                             <div class="flex-grow-1">
-                                <small class="text-muted">${file.name}</small><br>
-                                <small class="text-muted">${formatFileSize(file.size)}</small>
+                                <small class="text-muted">${file.name}</small>
                             </div>
                             <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSubImage(${index})">
                                 <i class="fas fa-times"></i>
@@ -645,94 +586,6 @@ $breadcrumbs = [
             
             input.files = dt.files;
             previewSubImages(input);
-        }
-
-        // Format file size
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // Preview product
-        function previewProduct() {
-            const formData = new FormData(document.getElementById('productForm'));
-            
-            // Validate required fields
-            const requiredFields = ['ten_san_pham', 'thuong_hieu', 'danh_muc_id', 'gia_goc', 'mo_ta_ngan'];
-            let isValid = true;
-            
-            requiredFields.forEach(field => {
-                const input = document.querySelector(`[name="${field}"]`);
-                if (!input.value.trim()) {
-                    input.classList.add('is-invalid');
-                    isValid = false;
-                } else {
-                    input.classList.remove('is-invalid');
-                }
-            });
-            
-            if (!isValid) {
-                alert('Vui lòng điền đầy đủ thông tin bắt buộc!');
-                return;
-            }
-            
-            // Generate preview
-            const preview = generatePreview(formData);
-            document.getElementById('previewContent').innerHTML = preview;
-            
-            // Show modal
-            new bootstrap.Modal(document.getElementById('previewModal')).show();
-        }
-
-        // Generate preview HTML
-        function generatePreview(formData) {
-            const ten_san_pham = formData.get('ten_san_pham');
-            const thuong_hieu = formData.get('thuong_hieu');
-            const gia_goc = parseInt(formData.get('gia_goc'));
-            const gia_khuyen_mai = formData.get('gia_khuyen_mai') ? parseInt(formData.get('gia_khuyen_mai')) : null;
-            const mo_ta_ngan = formData.get('mo_ta_ngan');
-            
-            const mainImage = document.getElementById('hinh_anh_chinh').files[0];
-            const mainImageSrc = mainImage ? URL.createObjectURL(mainImage) : '/tktshop/uploads/products/no-image.jpg';
-            
-            return `
-                <div class="row">
-                    <div class="col-md-5">
-                        <img src="${mainImageSrc}" class="img-fluid rounded" alt="Product Preview">
-                    </div>
-                    <div class="col-md-7">
-                        <h4>${ten_san_pham}</h4>
-                        <p class="text-muted">Thương hiệu: <strong>${thuong_hieu}</strong></p>
-                        <div class="mb-3">
-                            ${gia_khuyen_mai ? 
-                                `<h5 class="text-danger">${formatPrice(gia_khuyen_mai)} <small class="text-muted text-decoration-line-through">${formatPrice(gia_goc)}</small></h5>` :
-                                `<h5 class="text-primary">${formatPrice(gia_goc)}</h5>`
-                            }
-                        </div>
-                        <p>${mo_ta_ngan}</p>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i>
-                            Đây là bản xem trước. Biến thể (size, màu) sẽ được thêm sau khi lưu sản phẩm.
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Format price for preview
-        function formatPrice(price) {
-            return new Intl.NumberFormat('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-            }).format(price);
-        }
-
-        // Submit form
-        function submitForm() {
-            document.getElementById('productForm').submit();
         }
 
         // Price validation
@@ -775,16 +628,6 @@ $breadcrumbs = [
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            // Auto-dismiss alerts
-            setTimeout(() => {
-                const alerts = document.querySelectorAll('.alert');
-                alerts.forEach(alert => {
-                    if (alert.querySelector('.btn-close')) {
-                        alert.querySelector('.btn-close').click();
-                    }
-                });
-            }, 5000);
-            
             // Update character count on load
             const descInput = document.getElementById('mo_ta_ngan');
             if (descInput.value) {
