@@ -256,9 +256,17 @@ $admin_base = '/tktshop/admin';
                    class="submenu-link <?= isActiveMenu('/admin/products/index.php') ?>">
                     <i class="fas fa-list me-2"></i>Danh sách sản phẩm
                 </a>
-                <a href="<?= $admin_base ?>/products/create.php" 
-                   class="submenu-link <?= isActiveMenu('/admin/products/create.php') ?>">
+                <a href="<?= $admin_base ?>/products/add.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/add.php') ?>">
                     <i class="fas fa-plus me-2"></i>Thêm sản phẩm
+                </a>
+                <a href="<?= $admin_base ?>/products/variants.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
+                    <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
+                </a>
+                <a href="<?= $admin_base ?>/products/inventory.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/inventory.php') ?>">
+                    <i class="fas fa-warehouse me-2"></i>Quản lý tồn kho
                 </a>
             </div>
         </div>
