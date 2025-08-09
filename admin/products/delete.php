@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
             $pdo->commit();
             
             // Redirect về trang danh sách với thông báo thành công
-            header('Location: index.php?success=' . urlencode("Đã xóa sản phẩm '{$product['ten_san_pham']}' thành công!"));
+            header('Location: http://localhost/tktshop/admin/products/index.php?success=' . urlencode("Đã xóa sản phẩm '{$product['ten_san_pham']}' thành công!"));
             exit();
         } else {
             throw new Exception("Lỗi khi xóa sản phẩm từ database");
