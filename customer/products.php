@@ -629,7 +629,7 @@ function displayStars($rating) {
                                             <span class="badge bg-success position-absolute" style="top: 10px; left: 10px; z-index: 1;">Mới</span>
                                         <?php endif; ?>
                                         
-                                        <img src="<?= !empty($product['hinh_anh']) ? htmlspecialchars($product['hinh_anh']) : '/tktshop/assets/images/' ?>" 
+                                        <img src="<?= !empty($product['hinh_anh']) ? htmlspecialchars($product['hinh_anh']) : '/tktshop/assets/images/giaythethao.jpg' ?>" 
                                              class="card-img-top product-image" 
                                              alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                              loading="lazy">
