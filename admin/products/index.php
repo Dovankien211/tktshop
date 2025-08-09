@@ -9,141 +9,164 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-$product_id = isset($_GET['product_id']) ? (int)$_GET['product_id'] : 0;
-if (!$product_id) {
-    setFlashMessage('error', 'Không tìm thấy sản phẩm!');
-    header('Location: index.php');
-    exit();
+// Thiết lập phân trang
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$limit = ADMIN_ITEMS_PER_PAGE;
+$offset = ($page - 1) * $limit;
+
+// Thiết lập bộ lọc
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$category_filter = isset($_GET['category']) ? (int)$_GET['category'] : 0;
+$status_filter = isset($_GET['status']) ? $_GET['status'] : '';
+$brand_filter = isset($_GET['brand']) ? trim($_GET['brand']) : '';
+
+// Xây dựng WHERE clause
+$where_conditions = [];
+$params = [];
+
+if (!empty($search)) {
+    $where_conditions[] = "(sp.ten_san_pham LIKE ? OR sp.ma_san_pham LIKE ? OR sp.thuong_hieu LIKE ?)";
+    $search_param = "%$search%";
+    $params[] = $search_param;
+    $params[] = $search_param;
+    $params[] = $search_param;
 }
 
-// Lấy thông tin sản phẩm
-$product = null;
+if ($category_filter > 0) {
+    $where_conditions[] = "sp.danh_muc_id = ?";
+    $params[] = $category_filter;
+}
+
+if (!empty($status_filter)) {
+    $where_conditions[] = "sp.trang_thai = ?";
+    $params[] = $status_filter;
+}
+
+if (!empty($brand_filter)) {
+    $where_conditions[] = "sp.thuong_hieu LIKE ?";
+    $params[] = "%$brand_filter%";
+}
+
+$where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+
 try {
-    $stmt = $pdo->prepare("SELECT * FROM san_pham_chinh WHERE id = ?");
-    $stmt->execute([$product_id]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Lấy tổng số sản phẩm để phân trang
+    $count_sql = "SELECT COUNT(*) FROM san_pham_chinh sp $where_clause";
+    $count_stmt = $pdo->prepare($count_sql);
+    $count_stmt->execute($params);
+    $total_products = $count_stmt->fetchColumn();
+    $total_pages = ceil($total_products / $limit);
+
+    // Lấy danh sách sản phẩm
+    $sql = "SELECT 
+                sp.*,
+                dm.ten_danh_muc,
+                COUNT(btp.id) as so_bien_the,
+                SUM(btp.so_luong_ton_kho) as tong_ton_kho,
+                SUM(btp.so_luong_da_ban) as tong_da_ban
+            FROM san_pham_chinh sp
+            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+            LEFT JOIN bien_the_san_pham btp ON sp.id = btp.san_pham_id
+            $where_clause
+            GROUP BY sp.id
+            ORDER BY sp.ngay_tao DESC
+            LIMIT $limit OFFSET $offset";
     
-    if (!$product) {
-        setFlashMessage('error', 'Không tìm thấy sản phẩm!');
-        header('Location: index.php');
-        exit();
-    }
-} catch (PDOException $e) {
-    setFlashMessage('error', 'Lỗi database: ' . $e->getMessage());
-    header('Location: index.php');
-    exit();
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Lấy danh sách danh mục để filter
+    $categories_stmt = $pdo->query("SELECT * FROM danh_muc_giay WHERE trang_thai = 'hoat_dong' ORDER BY ten_danh_muc");
+    $categories = $categories_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Lấy danh sách thương hiệu
+    $brands_stmt = $pdo->query("SELECT DISTINCT thuong_hieu FROM san_pham_chinh WHERE thuong_hieu IS NOT NULL AND thuong_hieu != '' ORDER BY thuong_hieu");
+    $brands = $brands_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+} catch (Exception $e) {
+    $error = "Lỗi truy vấn: " . $e->getMessage();
+    $products = [];
+    $categories = [];
+    $brands = [];
+    $total_pages = 1;
 }
 
-// Lấy danh sách kích cỡ
-$sizes = [];
-try {
-    $stmt = $pdo->query("SELECT * FROM kich_co WHERE trang_thai = 'hoat_dong' ORDER BY thu_tu_sap_xep ASC");
-    $sizes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Lỗi khi tải kích cỡ: " . $e->getMessage();
-}
-
-// Lấy danh sách màu sắc
-$colors = [];
-try {
-    $stmt = $pdo->query("SELECT * FROM mau_sac WHERE trang_thai = 'hoat_dong' ORDER BY thu_tu_hien_thi ASC");
-    $colors = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Lỗi khi tải màu sắc: " . $e->getMessage();
-}
-
-// Lấy danh sách biến thể hiện có
-$variants = [];
-try {
-    $stmt = $pdo->prepare("
-        SELECT btp.*, kc.kich_co, ms.ten_mau, ms.ma_mau 
-        FROM bien_the_san_pham btp
-        JOIN kich_co kc ON btp.kich_co_id = kc.id
-        JOIN mau_sac ms ON btp.mau_sac_id = ms.id
-        WHERE btp.san_pham_id = ?
-        ORDER BY kc.thu_tu_sap_xep ASC, ms.thu_tu_hien_thi ASC
-    ");
-    $stmt->execute([$product_id]);
-    $variants = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Lỗi khi tải biến thể: " . $e->getMessage();
-}
-
-$error = '';
-$success = '';
-
-// Xử lý thêm biến thể
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_variant') {
+// Xử lý xóa sản phẩm
+if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    $product_id = (int)$_GET['id'];
     try {
-        $kich_co_id = (int)$_POST['kich_co_id'];
-        $mau_sac_id = (int)$_POST['mau_sac_id'];
-        $gia_ban = (int)$_POST['gia_ban'];
-        $gia_so_sanh = !empty($_POST['gia_so_sanh']) ? (int)$_POST['gia_so_sanh'] : null;
-        $so_luong_ton_kho = (int)$_POST['so_luong_ton_kho'];
+        // Kiểm tra xem sản phẩm có đơn hàng nào chưa
+        $order_check = $pdo->prepare("SELECT COUNT(*) FROM chi_tiet_don_hang WHERE san_pham_id = ?");
+        $order_check->execute([$product_id]);
         
-        // Kiểm tra trùng lặp biến thể
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM bien_the_san_pham WHERE san_pham_id = ? AND kich_co_id = ? AND mau_sac_id = ?");
-        $stmt->execute([$product_id, $kich_co_id, $mau_sac_id]);
-        if ($stmt->fetchColumn() > 0) {
-            throw new Exception("Biến thể này đã tồn tại!");
+        if ($order_check->fetchColumn() > 0) {
+            $alert_message = "Không thể xóa sản phẩm này vì đã có đơn hàng liên quan!";
+            $alert_type = "danger";
+        } else {
+            // Xóa biến thể trước
+            $pdo->prepare("DELETE FROM bien_the_san_pham WHERE san_pham_id = ?")->execute([$product_id]);
+            
+            // Xóa sản phẩm
+            $delete_stmt = $pdo->prepare("DELETE FROM san_pham_chinh WHERE id = ?");
+            $delete_stmt->execute([$product_id]);
+            
+            $alert_message = "Xóa sản phẩm thành công!";
+            $alert_type = "success";
         }
         
-        // Tạo SKU
-        $stmt = $pdo->prepare("SELECT kich_co FROM kich_co WHERE id = ?");
-        $stmt->execute([$kich_co_id]);
-        $size = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("SELECT ten_mau FROM mau_sac WHERE id = ?");
-        $stmt->execute([$mau_sac_id]);
-        $color = $stmt->fetchColumn();
-        
-        $ma_sku = strtoupper($product['ma_san_pham'] . '-' . $size . '-' . str_replace(' ', '', $color));
-        
-        // Xử lý upload ảnh biến thể
-        $hinh_anh_bien_the = null;
-        if (isset($_FILES['hinh_anh_bien_the']) && $_FILES['hinh_anh_bien_the']['error'] === UPLOAD_ERR_OK) {
-            $hinh_anh_bien_the = uploadImage($_FILES['hinh_anh_bien_the'], 'products');
-        }
-        
-        // Insert biến thể
-        $sql = "INSERT INTO bien_the_san_pham (
-                    san_pham_id, kich_co_id, mau_sac_id, ma_sku, gia_ban, gia_so_sanh, 
-                    so_luong_ton_kho, hinh_anh_bien_the
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $product_id, $kich_co_id, $mau_sac_id, $ma_sku, $gia_ban, 
-            $gia_so_sanh, $so_luong_ton_kho, $hinh_anh_bien_the
-        ]);
-        
-        $success = "Thêm biến thể thành công!";
-        
-        // Reload trang để cập nhật danh sách
-        header("Location: " . ADMIN_URL . "/products/variants.php?product_id=" . $product_id);
+        // Redirect để tránh lặp lại action
+        header("Location: index.php?alert=" . urlencode($alert_message) . "&type=" . $alert_type);
         exit();
         
     } catch (Exception $e) {
-        $error = "Lỗi: " . $e->getMessage();
+        $alert_message = "Lỗi khi xóa sản phẩm: " . $e->getMessage();
+        $alert_type = "danger";
     }
 }
 
-// Xử lý xóa biến thể
-if (isset($_GET['delete_variant'])) {
-    try {
-        $variant_id = (int)$_GET['delete_variant'];
-        
-        $stmt = $pdo->prepare("DELETE FROM bien_the_san_pham WHERE id = ? AND san_pham_id = ?");
-        $stmt->execute([$variant_id, $product_id]);
-        
-        setFlashMessage('success', 'Xóa biến thể thành công!');
-        header("Location: " . ADMIN_URL . "/products/variants.php?product_id=" . $product_id);
-        exit();
-        
-    } catch (Exception $e) {
-        setFlashMessage('error', 'Lỗi khi xóa biến thể: ' . $e->getMessage());
+// Xử lý thay đổi trạng thái hàng loạt
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
+    $selected_ids = $_POST['selected_products'] ?? [];
+    $bulk_action = $_POST['bulk_action'];
+    
+    if (!empty($selected_ids) && in_array($bulk_action, ['hoat_dong', 'an', 'het_hang', 'delete'])) {
+        try {
+            $ids_placeholder = str_repeat('?,', count($selected_ids) - 1) . '?';
+            
+            if ($bulk_action === 'delete') {
+                // Xóa hàng loạt
+                $pdo->prepare("DELETE FROM bien_the_san_pham WHERE san_pham_id IN ($ids_placeholder)")->execute($selected_ids);
+                $pdo->prepare("DELETE FROM san_pham_chinh WHERE id IN ($ids_placeholder)")->execute($selected_ids);
+                $alert_message = "Đã xóa " . count($selected_ids) . " sản phẩm!";
+            } else {
+                // Cập nhật trạng thái hàng loạt
+                $update_sql = "UPDATE san_pham_chinh SET trang_thai = ? WHERE id IN ($ids_placeholder)";
+                $update_params = array_merge([$bulk_action], $selected_ids);
+                $pdo->prepare($update_sql)->execute($update_params);
+                $alert_message = "Đã cập nhật trạng thái cho " . count($selected_ids) . " sản phẩm!";
+            }
+            
+            $alert_type = "success";
+            
+        } catch (Exception $e) {
+            $alert_message = "Lỗi: " . $e->getMessage();
+            $alert_type = "danger";
+        }
     }
 }
+
+// Lấy thông báo từ URL nếu có
+if (isset($_GET['alert'])) {
+    $alert_message = $_GET['alert'];
+    $alert_type = $_GET['type'] ?? 'info';
+}
+
+$page_title = "Quản lý sản phẩm";
+$breadcrumbs = [
+    ['title' => 'Dashboard', 'url' => '../dashboard.php'],
+    ['title' => 'Sản phẩm', 'url' => 'index.php']
+];
 ?>
 
 <!DOCTYPE html>
@@ -151,24 +174,38 @@ if (isset($_GET['delete_variant'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý biến thể - <?php echo htmlspecialchars($product['ten_san_pham']); ?> - TKT Shop Admin</title>
+    <title><?= $page_title ?> - TKT Shop Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        .color-preview {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: inline-block;
-            border: 1px solid #ddd;
-            margin-right: 5px;
+        .product-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
         }
-        .variant-card {
-            transition: all 0.3s ease;
+        .status-badge {
+            font-size: 0.75rem;
         }
-        .variant-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        .table th {
+            background-color: #f8f9fa;
+            border-top: none;
+            font-weight: 600;
+        }
+        .filter-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        .product-actions .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
         }
     </style>
 </head>
@@ -176,183 +213,303 @@ if (isset($_GET['delete_variant'])) {
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
+            <div class="col-md-2 p-0">
+                <?php include '../layouts/sidebar.php'; ?>
+            </div>
             
             <!-- Main content -->
-            <div class="col-md-9 col-lg-10">
-                <div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <div>
-                        <h1 class="h2">Quản lý biến thể</h1>
-                        <nav aria-label="breadcrumb">
-                            <ol class="breadcrumb">
-                                <li class="breadcrumb-item"><a href="index.php">Sản phẩm</a></li>
-                                <li class="breadcrumb-item active"><?php echo htmlspecialchars($product['ten_san_pham']); ?></li>
-                            </ol>
-                        </nav>
-                    </div>
-                    <div>
-                        <a href="index.php" class="btn btn-outline-secondary me-2">
-                            <i class="fas fa-arrow-left"></i> Quay lại
-                        </a>
-                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addVariantModal">
-                            <i class="fas fa-plus"></i> Thêm biến thể
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Flash Messages -->
-                <?php if ($error): ?>
-                    <div class="alert alert-danger alert-dismissible fade show">
-                        <i class="fas fa-exclamation-triangle"></i> <?php echo $error; ?>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($success): ?>
-                    <div class="alert alert-success alert-dismissible fade show">
-                        <i class="fas fa-check-circle"></i> <?php echo $success; ?>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                <?php endif; ?>
-
-                <?php
-                $flash = getFlashMessage();
-                if ($flash):
-                ?>
-                    <div class="alert alert-<?php echo $flash['type'] === 'error' ? 'danger' : $flash['type']; ?> alert-dismissible fade show">
-                        <i class="fas fa-<?php echo $flash['type'] === 'error' ? 'exclamation-triangle' : 'check-circle'; ?>"></i> 
-                        <?php echo $flash['message']; ?>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                <?php endif; ?>
-
-                <!-- Thông tin sản phẩm -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-info-circle"></i> Thông tin sản phẩm
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-2">
-                                <?php if ($product['hinh_anh_chinh']): ?>
-                                    <img src="<?php echo UPLOAD_URL . $product['hinh_anh_chinh']; ?>" 
-                                         alt="<?php echo htmlspecialchars($product['ten_san_pham']); ?>" 
-                                         class="img-fluid rounded">
-                                <?php else: ?>
-                                    <div class="bg-light p-3 text-center rounded">
-                                        <i class="fas fa-image fa-3x text-muted"></i>
-                                    </div>
-                                <?php endif; ?>
+            <div class="col-md-10">
+                <!-- Header -->
+                <?php include '../layouts/header.php'; ?>
+                
+                <div class="p-4">
+                    <!-- Stats Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-box fa-2x mb-2"></i>
+                                    <h4><?= number_format($total_products) ?></h4>
+                                    <small>Tổng sản phẩm</small>
+                                </div>
                             </div>
-                            <div class="col-md-10">
-                                <h4><?php echo htmlspecialchars($product['ten_san_pham']); ?></h4>
-                                <p class="text-muted mb-2">
-                                    <strong>Mã sản phẩm:</strong> <?php echo htmlspecialchars($product['ma_san_pham']); ?> |
-                                    <strong>Thương hiệu:</strong> <?php echo htmlspecialchars($product['thuong_hieu']); ?> |
-                                    <strong>Giá gốc:</strong> <?php echo formatPrice($product['gia_goc']); ?>
-                                </p>
-                                <p><?php echo htmlspecialchars($product['mo_ta_ngan']); ?></p>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-eye fa-2x mb-2"></i>
+                                    <h4><?php 
+                                        $active_count = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh WHERE trang_thai = 'hoat_dong'")->fetchColumn();
+                                        echo number_format($active_count);
+                                    ?></h4>
+                                    <small>Đang hiển thị</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                    <h4><?php 
+                                        $low_stock = $pdo->query("SELECT COUNT(DISTINCT sp.id) FROM san_pham_chinh sp JOIN bien_the_san_pham btp ON sp.id = btp.san_pham_id WHERE btp.so_luong_ton_kho <= 5")->fetchColumn();
+                                        echo number_format($low_stock);
+                                    ?></h4>
+                                    <small>Sắp hết hàng</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-plus fa-2x mb-2"></i>
+                                    <h4><?php 
+                                        $new_products = $pdo->query("SELECT COUNT(*) FROM san_pham_chinh WHERE DATE(ngay_tao) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")->fetchColumn();
+                                        echo number_format($new_products);
+                                    ?></h4>
+                                    <small>Mới trong tuần</small>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Danh sách biến thể -->
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-list"></i> Danh sách biến thể (<?php echo count($variants); ?>)
-                        </h5>
+                    <!-- Filter Section -->
+                    <div class="filter-section">
+                        <form method="GET" class="row g-3">
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" name="search" placeholder="Tìm kiếm sản phẩm..." value="<?= htmlspecialchars($search) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select" name="category">
+                                    <option value="">Tất cả danh mục</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?= $category['id'] ?>" <?= $category_filter == $category['id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($category['ten_danh_muc']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select" name="status">
+                                    <option value="">Tất cả trạng thái</option>
+                                    <option value="hoat_dong" <?= $status_filter === 'hoat_dong' ? 'selected' : '' ?>>Hoạt động</option>
+                                    <option value="an" <?= $status_filter === 'an' ? 'selected' : '' ?>>Ẩn</option>
+                                    <option value="het_hang" <?= $status_filter === 'het_hang' ? 'selected' : '' ?>>Hết hàng</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select" name="brand">
+                                    <option value="">Tất cả thương hiệu</option>
+                                    <?php foreach ($brands as $brand): ?>
+                                        <option value="<?= htmlspecialchars($brand) ?>" <?= $brand_filter === $brand ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($brand) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="btn-group w-100">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-search"></i> Tìm kiếm
+                                    </button>
+                                    <a href="index.php" class="btn btn-outline-secondary">
+                                        <i class="fas fa-refresh"></i> Reset
+                                    </a>
+                                    <a href="create.php" class="btn btn-success">
+                                        <i class="fas fa-plus"></i> Thêm mới
+                                    </a>
+                                </div>
+                            </div>
+                        </form>
                     </div>
-                    <div class="card-body">
-                        <?php if (empty($variants)): ?>
-                            <div class="text-center py-5">
-                                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
-                                <h5 class="text-muted">Chưa có biến thể nào</h5>
-                                <p class="text-muted">Hãy thêm biến thể đầu tiên cho sản phẩm này</p>
-                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addVariantModal">
-                                    <i class="fas fa-plus"></i> Thêm biến thể
+
+                    <!-- Alert Messages -->
+                    <?php if (isset($alert_message)): ?>
+                        <div class="alert alert-<?= $alert_type ?> alert-dismissible fade show">
+                            <i class="fas fa-<?= $alert_type === 'danger' ? 'exclamation-triangle' : 'check-circle' ?>"></i>
+                            <?= htmlspecialchars($alert_message) ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Products Table -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list me-2"></i>Danh sách sản phẩm (<?= number_format($total_products) ?>)
+                            </h5>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll()">
+                                    <i class="fas fa-check-square"></i> Chọn tất cả
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#bulkActionModal">
+                                    <i class="fas fa-cogs"></i> Hành động hàng loạt
                                 </button>
                             </div>
-                        <?php else: ?>
-                            <div class="row">
-                                <?php foreach ($variants as $variant): ?>
-                                    <div class="col-lg-4 col-md-6 mb-3">
-                                        <div class="card variant-card h-100">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                                    <div>
-                                                        <h6 class="card-title mb-1">
-                                                            Size <?php echo htmlspecialchars($variant['kich_co']); ?>
-                                                        </h6>
-                                                        <div class="d-flex align-items-center mb-2">
-                                                            <span class="color-preview" style="background-color: <?php echo $variant['ma_mau']; ?>"></span>
-                                                            <span><?php echo htmlspecialchars($variant['ten_mau']); ?></span>
+                        </div>
+                        <div class="card-body p-0">
+                            <?php if (empty($products)): ?>
+                                <div class="text-center py-5">
+                                    <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">Không tìm thấy sản phẩm nào</h5>
+                                    <p class="text-muted">Thử thay đổi điều kiện tìm kiếm hoặc thêm sản phẩm mới</p>
+                                    <a href="create.php" class="btn btn-primary">
+                                        <i class="fas fa-plus"></i> Thêm sản phẩm đầu tiên
+                                    </a>
+                                </div>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th width="50"><input type="checkbox" id="selectAll"></th>
+                                                <th width="80">Ảnh</th>
+                                                <th>Sản phẩm</th>
+                                                <th>Danh mục</th>
+                                                <th>Giá</th>
+                                                <th>Biến thể</th>
+                                                <th>Tồn kho</th>
+                                                <th>Đã bán</th>
+                                                <th>Trạng thái</th>
+                                                <th width="150">Hành động</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($products as $product): ?>
+                                                <tr>
+                                                    <td>
+                                                        <input type="checkbox" class="product-checkbox" value="<?= $product['id'] ?>">
+                                                    </td>
+                                                    <td>
+                                                        <?php if ($product['hinh_anh_chinh']): ?>
+                                                            <img src="<?= getProductImageUrl($product['hinh_anh_chinh']) ?>" 
+                                                                 alt="<?= htmlspecialchars($product['ten_san_pham']) ?>" 
+                                                                 class="product-image">
+                                                        <?php else: ?>
+                                                            <div class="product-image bg-light d-flex align-items-center justify-content-center">
+                                                                <i class="fas fa-image text-muted"></i>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <div>
+                                                            <strong><?= htmlspecialchars($product['ten_san_pham']) ?></strong><br>
+                                                            <small class="text-muted">
+                                                                Mã: <?= htmlspecialchars($product['ma_san_pham']) ?><br>
+                                                                <?= htmlspecialchars($product['thuong_hieu']) ?>
+                                                            </small>
                                                         </div>
-                                                    </div>
-                                                    <div class="dropdown">
-                                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
-                                                            <i class="fas fa-ellipsis-v"></i>
-                                                        </button>
-                                                        <ul class="dropdown-menu">
-                                                            <li>
-                                                                <a class="dropdown-item" href="#" onclick="editVariant(<?php echo $variant['id']; ?>)">
-                                                                    <i class="fas fa-edit"></i> Sửa
-                                                                </a>
-                                                            </li>
-                                                            <li>
-                                                                <a class="dropdown-item text-danger" href="#" onclick="deleteVariant(<?php echo $variant['id']; ?>)">
-                                                                    <i class="fas fa-trash"></i> Xóa
-                                                                </a>
-                                                            </li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="mb-2">
-                                                    <small class="text-muted">SKU:</small><br>
-                                                    <code><?php echo htmlspecialchars($variant['ma_sku']); ?></code>
-                                                </div>
-                                                
-                                                <div class="mb-2">
-                                                    <small class="text-muted">Giá bán:</small><br>
-                                                    <strong class="text-primary"><?php echo formatPrice($variant['gia_ban']); ?></strong>
-                                                    <?php if ($variant['gia_so_sanh']): ?>
-                                                        <small class="text-muted text-decoration-line-through ms-2">
-                                                            <?php echo formatPrice($variant['gia_so_sanh']); ?>
-                                                        </small>
-                                                    <?php endif; ?>
-                                                </div>
-                                                
-                                                <div class="mb-2">
-                                                    <small class="text-muted">Tồn kho:</small><br>
-                                                    <span class="badge bg-<?php echo $variant['so_luong_ton_kho'] > 0 ? 'success' : 'danger'; ?>">
-                                                        <?php echo $variant['so_luong_ton_kho']; ?> sản phẩm
-                                                    </span>
-                                                </div>
-                                                
-                                                <div class="mb-2">
-                                                    <small class="text-muted">Đã bán:</small> 
-                                                    <span class="fw-bold"><?php echo $variant['so_luong_da_ban']; ?></span>
-                                                </div>
-                                                
-                                                <div class="mt-2">
-                                                    <span class="badge bg-<?php echo $variant['trang_thai'] === 'hoat_dong' ? 'success' : 'secondary'; ?>">
-                                                        <?php 
-                                                        switch($variant['trang_thai']) {
-                                                            case 'hoat_dong': echo 'Hoạt động'; break;
-                                                            case 'het_hang': echo 'Hết hàng'; break;
-                                                            case 'an': echo 'Ẩn'; break;
-                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-secondary">
+                                                            <?= htmlspecialchars($product['ten_danh_muc'] ?? 'Chưa phân loại') ?>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <strong class="text-primary"><?= formatPrice($product['gia_goc']) ?></strong>
+                                                        <?php if ($product['gia_khuyen_mai'] && $product['gia_khuyen_mai'] < $product['gia_goc']): ?>
+                                                            <br><small class="text-success"><?= formatPrice($product['gia_khuyen_mai']) ?></small>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info"><?= $product['so_bien_the'] ?? 0 ?></span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-<?= ($product['tong_ton_kho'] ?? 0) > 0 ? 'success' : 'danger' ?>">
+                                                            <?= $product['tong_ton_kho'] ?? 0 ?>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <strong><?= $product['tong_da_ban'] ?? 0 ?></strong>
+                                                    </td>
+                                                    <td>
+                                                        <?php
+                                                        $status_config = [
+                                                            'hoat_dong' => ['class' => 'success', 'text' => 'Hoạt động'],
+                                                            'an' => ['class' => 'secondary', 'text' => 'Ẩn'],
+                                                            'het_hang' => ['class' => 'warning', 'text' => 'Hết hàng']
+                                                        ];
+                                                        $status = $status_config[$product['trang_thai']] ?? ['class' => 'dark', 'text' => $product['trang_thai']];
                                                         ?>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
+                                                        <span class="badge bg-<?= $status['class'] ?> status-badge">
+                                                            <?= $status['text'] ?>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="product-actions">
+                                                            <a href="variants.php?product_id=<?= $product['id'] ?>" 
+                                                               class="btn btn-sm btn-outline-primary" title="Quản lý biến thể">
+                                                                <i class="fas fa-cubes"></i>
+                                                            </a>
+                                                            <a href="edit.php?id=<?= $product['id'] ?>" 
+                                                               class="btn btn-sm btn-outline-warning" title="Sửa">
+                                                                <i class="fas fa-edit"></i>
+                                                            </a>
+                                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                                    onclick="deleteProduct(<?= $product['id'] ?>)" title="Xóa">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <?php if ($total_pages > 1): ?>
+                            <div class="card-footer">
+                                <nav aria-label="Products pagination">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                                            <a class="page-link" href="?page=<?= $page - 1 ?>&<?= http_build_query($_GET) ?>">
+                                                <i class="fas fa-chevron-left"></i>
+                                            </a>
+                                        </li>
+                                        
+                                        <?php
+                                        $start = max(1, $page - 2);
+                                        $end = min($total_pages, $page + 2);
+                                        
+                                        if ($start > 1): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page=1&<?= http_build_query($_GET) ?>">1</a>
+                                            </li>
+                                            <?php if ($start > 2): ?>
+                                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                            <?php endif;
+                                        endif;
+                                        
+                                        for ($i = $start; $i <= $end; $i++): ?>
+                                            <li class="page-item <?= $i == $page ? 'active' : '' ?>">
+                                                <a class="page-link" href="?page=<?= $i ?>&<?= http_build_query($_GET) ?>"><?= $i ?></a>
+                                            </li>
+                                        <?php endfor;
+                                        
+                                        if ($end < $total_pages): ?>
+                                            <?php if ($end < $total_pages - 1): ?>
+                                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                            <?php endif; ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page=<?= $total_pages ?>&<?= http_build_query($_GET) ?>"><?= $total_pages ?></a>
+                                            </li>
+                                        <?php endif; ?>
+                                        
+                                        <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                                            <a class="page-link" href="?page=<?= $page + 1 ?>&<?= http_build_query($_GET) ?>">
+                                                <i class="fas fa-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Hiển thị <?= ($offset + 1) ?> - <?= min($offset + $limit, $total_products) ?> 
+                                        trong tổng số <?= number_format($total_products) ?> sản phẩm
+                                    </small>
+                                </div>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -361,80 +518,35 @@ if (isset($_GET['delete_variant'])) {
         </div>
     </div>
 
-    <!-- Modal thêm biến thể -->
-    <div class="modal fade" id="addVariantModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+    <!-- Bulk Action Modal -->
+    <div class="modal fade" id="bulkActionModal" tabindex="-1">
+        <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" enctype="multipart/form-data">
-                    <input type="hidden" name="action" value="add_variant">
+                <form method="POST" id="bulkActionForm">
                     <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-plus"></i> Thêm biến thể mới
-                        </h5>
+                        <h5 class="modal-title">Hành động hàng loạt</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="kich_co_id" class="form-label">Kích cỡ *</label>
-                                    <select class="form-select" id="kich_co_id" name="kich_co_id" required>
-                                        <option value="">Chọn kích cỡ</option>
-                                        <?php foreach ($sizes as $size): ?>
-                                            <option value="<?php echo $size['id']; ?>">
-                                                Size <?php echo htmlspecialchars($size['kich_co']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="mau_sac_id" class="form-label">Màu sắc *</label>
-                                    <select class="form-select" id="mau_sac_id" name="mau_sac_id" required>
-                                        <option value="">Chọn màu sắc</option>
-                                        <?php foreach ($colors as $color): ?>
-                                            <option value="<?php echo $color['id']; ?>" data-color="<?php echo $color['ma_mau']; ?>">
-                                                <?php echo htmlspecialchars($color['ten_mau']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="gia_ban" class="form-label">Giá bán *</label>
-                                    <input type="number" class="form-control" id="gia_ban" name="gia_ban" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="gia_so_sanh" class="form-label">Giá so sánh</label>
-                                    <input type="number" class="form-control" id="gia_so_sanh" name="gia_so_sanh">
-                                    <div class="form-text">Giá gốc để hiển thị khuyến mãi</div>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div class="mb-3">
-                            <label for="so_luong_ton_kho" class="form-label">Số lượng tồn kho *</label>
-                            <input type="number" class="form-control" id="so_luong_ton_kho" name="so_luong_ton_kho" required>
+                            <label class="form-label">Chọn hành động:</label>
+                            <select class="form-select" name="bulk_action" required>
+                                <option value="">-- Chọn hành động --</option>
+                                <option value="hoat_dong">Kích hoạt</option>
+                                <option value="an">Ẩn sản phẩm</option>
+                                <option value="het_hang">Đánh dấu hết hàng</option>
+                                <option value="delete" class="text-danger">Xóa sản phẩm</option>
+                            </select>
                         </div>
-                        
-                        <div class="mb-3">
-                            <label for="hinh_anh_bien_the" class="form-label">Ảnh biến thể</label>
-                            <input type="file" class="form-control" id="hinh_anh_bien_the" name="hinh_anh_bien_the" accept="image/*">
-                            <div class="form-text">Ảnh riêng cho biến thể này (tùy chọn)</div>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Hành động này sẽ áp dụng cho tất cả sản phẩm đã chọn. Vui lòng kiểm tra kỹ trước khi thực hiện.
                         </div>
+                        <div id="selectedProductsInfo"></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Thêm biến thể
-                        </button>
+                        <button type="submit" class="btn btn-primary">Thực hiện</button>
                     </div>
                 </form>
             </div>
@@ -443,27 +555,108 @@ if (isset($_GET['delete_variant'])) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function deleteVariant(variantId) {
-            if (confirm('Bạn có chắc chắn muốn xóa biến thể này?')) {
-                window.location.href = '<?php echo ADMIN_URL; ?>/products/variants.php?product_id=<?php echo $product_id; ?>&delete_variant=' + variantId;
+        // Select all functionality
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const productCheckboxes = document.querySelectorAll('.product-checkbox');
+            
+            selectAllCheckbox.checked = !selectAllCheckbox.checked;
+            productCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            
+            updateBulkActionButton();
+        }
+
+        // Update bulk action button state
+        function updateBulkActionButton() {
+            const selectedCount = document.querySelectorAll('.product-checkbox:checked').length;
+            const bulkActionButton = document.querySelector('[data-bs-target="#bulkActionModal"]');
+            
+            if (selectedCount > 0) {
+                bulkActionButton.textContent = `Hành động hàng loạt (${selectedCount})`;
+                bulkActionButton.disabled = false;
+            } else {
+                bulkActionButton.textContent = 'Hành động hàng loạt';
+                bulkActionButton.disabled = true;
             }
         }
-        
-        function editVariant(variantId) {
-            // TODO: Implement edit functionality
-            alert('Chức năng sửa biến thể sẽ được cập nhật trong phiên bản tiếp theo');
-        }
-        
-        // Hiển thị màu sắc trong select option
-        document.getElementById('mau_sac_id').addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const color = selectedOption.getAttribute('data-color');
-            if (color) {
-                this.style.borderLeft = '5px solid ' + color;
-            } else {
-                this.style.borderLeft = '';
+
+        // Individual checkbox change handler
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('product-checkbox')) {
+                updateBulkActionButton();
+                
+                // Update select all checkbox state
+                const productCheckboxes = document.querySelectorAll('.product-checkbox');
+                const checkedCount = document.querySelectorAll('.product-checkbox:checked').length;
+                const selectAllCheckbox = document.getElementById('selectAll');
+                
+                selectAllCheckbox.checked = checkedCount === productCheckboxes.length;
+                selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < productCheckboxes.length;
             }
         });
+
+        // Show bulk action modal
+        document.getElementById('bulkActionModal').addEventListener('show.bs.modal', function() {
+            const selectedIds = Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => cb.value);
+            const selectedCount = selectedIds.length;
+            
+            // Add hidden inputs for selected products
+            const form = document.getElementById('bulkActionForm');
+            const existingInputs = form.querySelectorAll('input[name="selected_products[]"]');
+            existingInputs.forEach(input => input.remove());
+            
+            selectedIds.forEach(id => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'selected_products[]';
+                input.value = id;
+                form.appendChild(input);
+            });
+            
+            // Update info text
+            document.getElementById('selectedProductsInfo').innerHTML = 
+                `<strong>Đã chọn ${selectedCount} sản phẩm</strong>`;
+        });
+
+        // Delete single product
+        function deleteProduct(productId) {
+            if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?\n\nLưu ý: Sản phẩm đã có đơn hàng sẽ không thể xóa.')) {
+                window.location.href = `index.php?action=delete&id=${productId}`;
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            updateBulkActionButton();
+            
+            // Auto-dismiss alerts after 5 seconds
+            setTimeout(() => {
+                const alerts = document.querySelectorAll('.alert');
+                alerts.forEach(alert => {
+                    if (alert.querySelector('.btn-close')) {
+                        alert.querySelector('.btn-close').click();
+                    }
+                });
+            }, 5000);
+        });
+
+        // Quick search with Enter key
+        document.querySelector('input[name="search"]').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.form.submit();
+            }
+        });
+
+        // Prevent form submission on page reload
+        if (window.history.replaceState) {
+            const url = new URL(window.location);
+            url.searchParams.delete('alert');
+            url.searchParams.delete('type');
+            window.history.replaceState({}, document.title, url);
+        }
     </script>
 </body>
 </html>
