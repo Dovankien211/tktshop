@@ -1,8 +1,8 @@
 <?php
 // customer/cart.php
 /**
- * Giỏ hàng - CRUD AJAX + tính tổng tự động + validate tồn kho
- * Chức năng: Hiển thị, thêm, sửa, xóa sản phẩm trong giỏ hàng
+ * Giỏ hàng - CRUD AJAX + tính tổng tự động + validate tồn kho + CHECKBOX SELECTION
+ * Chức năng: Hiển thị, thêm, sửa, xóa sản phẩm trong giỏ hàng với checkbox chọn nhiều
  */
 
 require_once '../config/database.php';
@@ -27,7 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $quantity = max(1, (int)$_POST['quantity']);
             
             try {
-                // ✅ SỬA: Dùng tên cột đúng 'bien_the_id'
                 $stmt = $pdo->prepare("
                     SELECT gh.*, bsp.so_luong_ton_kho, sp.ten_san_pham,
                            bsp.gia_ban, kc.kich_co, ms.ten_mau
@@ -103,6 +102,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra khi xóa']);
             }
             exit;
+
+        // XÓA NHIỀU SẢN PHẨM ĐÃ CHỌN (NEW FEATURE)
+        case 'remove_selected':
+            $cart_ids = $_POST['cart_ids'] ?? [];
+            
+            if (empty($cart_ids) || !is_array($cart_ids)) {
+                echo json_encode(['success' => false, 'message' => 'Không có sản phẩm nào được chọn']);
+                exit;
+            }
+            
+            try {
+                $placeholders = str_repeat('?,', count($cart_ids) - 1) . '?';
+                $params = array_merge($cart_ids, [$customer_id, $session_id]);
+                
+                $stmt = $pdo->prepare("
+                    DELETE FROM gio_hang 
+                    WHERE id IN ($placeholders) AND (khach_hang_id = ? OR session_id = ?)
+                ");
+                $result = $stmt->execute($params);
+                
+                if ($result) {
+                    $cart_totals = calculateCartTotals($pdo, $customer_id, $session_id);
+                    
+                    echo json_encode([
+                        'success' => true,
+                        'message' => 'Đã xóa ' . count($cart_ids) . ' sản phẩm khỏi giỏ hàng',
+                        'cart_totals' => $cart_totals
+                    ]);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Không thể xóa sản phẩm']);
+                }
+                
+            } catch (Exception $e) {
+                echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra khi xóa']);
+            }
+            exit;
             
         // XÓA TẤT CẢ (CLEAR CART)
         case 'clear_cart':
@@ -120,6 +155,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 
             } catch (Exception $e) {
                 echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra']);
+            }
+            exit;
+
+        // TÍNH TỔNG CHO SẢN PHẨM ĐÃ CHỌN (NEW FEATURE)
+        case 'calculate_selected':
+            $cart_ids = $_POST['cart_ids'] ?? [];
+            
+            try {
+                if (empty($cart_ids)) {
+                    echo json_encode([
+                        'success' => true,
+                        'totals' => [
+                            'selected_count' => 0,
+                            'selected_quantity' => 0,
+                            'selected_subtotal' => 0,
+                            'selected_subtotal_formatted' => formatPrice(0),
+                            'shipping_fee' => 0,
+                            'shipping_fee_formatted' => formatPrice(0),
+                            'tax' => 0,
+                            'tax_formatted' => formatPrice(0),
+                            'total' => 0,
+                            'total_formatted' => formatPrice(0)
+                        ]
+                    ]);
+                    exit;
+                }
+                
+                $placeholders = str_repeat('?,', count($cart_ids) - 1) . '?';
+                $params = array_merge($cart_ids, [$customer_id, $session_id]);
+                
+                $stmt = $pdo->prepare("
+                    SELECT 
+                        COUNT(*) as selected_count,
+                        SUM(gh.so_luong) as selected_quantity,
+                        SUM(gh.so_luong * bsp.gia_ban) as selected_subtotal
+                    FROM gio_hang gh
+                    JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
+                    WHERE gh.id IN ($placeholders) AND (gh.khach_hang_id = ? OR gh.session_id = ?)
+                ");
+                $stmt->execute($params);
+                $totals = $stmt->fetch();
+                
+                $subtotal = $totals['selected_subtotal'] ?? 0;
+                $shipping_fee = $subtotal >= 500000 ? 0 : 30000;
+                $tax = $subtotal * 0.1;
+                $total = $subtotal + $shipping_fee + $tax;
+                
+                echo json_encode([
+                    'success' => true,
+                    'totals' => [
+                        'selected_count' => $totals['selected_count'] ?? 0,
+                        'selected_quantity' => $totals['selected_quantity'] ?? 0,
+                        'selected_subtotal' => $subtotal,
+                        'selected_subtotal_formatted' => formatPrice($subtotal),
+                        'shipping_fee' => $shipping_fee,
+                        'shipping_fee_formatted' => $shipping_fee > 0 ? formatPrice($shipping_fee) : 'Miễn phí',
+                        'tax' => $tax,
+                        'tax_formatted' => formatPrice($tax),
+                        'total' => $total,
+                        'total_formatted' => formatPrice($total),
+                        'free_shipping_remaining' => max(0, 500000 - $subtotal)
+                    ]
+                ]);
+                
+            } catch (Exception $e) {
+                echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra khi tính tổng']);
             }
             exit;
             
@@ -154,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     exit;
                 }
                 
-                // ✅ SỬA: Kiểm tra đã có trong giỏ hàng chưa - dùng tên cột đúng
+                // Kiểm tra đã có trong giỏ hàng chưa
                 $check = $pdo->prepare("
                     SELECT * FROM gio_hang 
                     WHERE bien_the_id = ? 
@@ -177,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     $pdo->prepare("UPDATE gio_hang SET so_luong = ? WHERE id = ?")
                         ->execute([$new_quantity, $existing['id']]);
                 } else {
-                    // ✅ SỬA: Thêm mới - dùng tên cột đúng và đầy đủ
+                    // Thêm mới
                     $pdo->prepare("
                         INSERT INTO gio_hang (khach_hang_id, session_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
                         VALUES (?, ?, ?, ?, ?, NOW())
@@ -201,7 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
 
 // Hàm tính tổng giỏ hàng
 function calculateCartTotals($pdo, $customer_id, $session_id) {
-    // ✅ SỬA: Dùng tên cột đúng trong JOIN
     $stmt = $pdo->prepare("
         SELECT 
             SUM(gh.so_luong * bsp.gia_ban) as subtotal,
@@ -243,7 +343,6 @@ $cart_items = [];
 $cart_totals = ['subtotal' => 0, 'item_count' => 0];
 
 if ($customer_id || $session_id) {
-    // ✅ SỬA: Dùng tên cột đúng trong query hiển thị
     $stmt = $pdo->prepare("
         SELECT gh.*, sp.ten_san_pham, sp.slug, sp.hinh_anh_chinh,
                bsp.gia_ban, bsp.so_luong_ton_kho, bsp.ma_sku,
@@ -295,18 +394,27 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
     
     <style>
         .cart-item {
-            border-bottom: 1px solid #eee;
-            padding: 20px 0;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: white;
             transition: all 0.3s ease;
         }
         
-        .cart-item:last-child {
-            border-bottom: none;
+        .cart-item.selected {
+            border-color: #0d6efd;
+            background: #f8f9ff;
         }
         
         .cart-item.removing {
             opacity: 0.5;
             transform: translateX(-20px);
+        }
+        
+        .cart-checkbox {
+            transform: scale(1.3);
+            margin-right: 10px;
         }
         
         .product-image {
@@ -347,32 +455,23 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             border-radius: 4px;
         }
         
-        .suggested-products {
+        .cart-actions {
             background: #fff;
-            border: 1px solid #e9ecef;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 30px;
-        }
-        
-        .product-card {
-            transition: transform 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .product-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .empty-cart {
-            text-align: center;
-            padding: 60px 20px;
-        }
-        
-        .empty-cart i {
-            font-size: 4rem;
-            color: #6c757d;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
             margin-bottom: 20px;
+        }
+        
+        .btn-delete-selected {
+            background: #dc3545;
+            border: none;
+            color: white;
+        }
+        
+        .btn-delete-selected:disabled {
+            background: #6c757d;
+            opacity: 0.6;
         }
         
         .loading-overlay {
@@ -440,8 +539,8 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 
                 <?php if (empty($cart_items)): ?>
                     <!-- Empty Cart -->
-                    <div class="empty-cart">
-                        <i class="fas fa-shopping-cart"></i>
+                    <div class="text-center py-5">
+                        <i class="fas fa-shopping-cart fa-4x text-muted mb-4"></i>
                         <h4>Giỏ hàng của bạn đang trống</h4>
                         <p class="text-muted mb-4">Khám phá các sản phẩm tuyệt vời và thêm vào giỏ hàng ngay!</p>
                         <a href="products.php" class="btn btn-primary">
@@ -450,11 +549,46 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                         </a>
                     </div>
                 <?php else: ?>
+                    
+                    <!-- Cart Actions -->
+                    <div class="cart-actions">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input cart-checkbox" 
+                                           type="checkbox" 
+                                           id="selectAll">
+                                    <label class="form-check-label fw-bold" for="selectAll">
+                                        Chọn tất cả (<span id="totalItems"><?= count($cart_items) ?></span> sản phẩm)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-md-end mt-2 mt-md-0">
+                                <button type="button" 
+                                        class="btn btn-delete-selected btn-sm" 
+                                        id="deleteSelected"
+                                        onclick="removeSelectedItems()" 
+                                        disabled>
+                                    <i class="fas fa-trash me-1"></i>
+                                    Xóa đã chọn (<span id="selectedCount">0</span>)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Cart Items -->
                     <div id="cartItems">
                         <?php foreach ($cart_items as $item): ?>
                             <div class="cart-item" data-cart-id="<?= $item['id'] ?>">
                                 <div class="row align-items-center">
+                                    <!-- Checkbox -->
+                                    <div class="col-auto">
+                                        <input class="form-check-input cart-checkbox item-checkbox" 
+                                               type="checkbox" 
+                                               data-cart-id="<?= $item['id'] ?>"
+                                               onchange="updateSelection()">
+                                    </div>
+                                    
                                     <!-- Product Image -->
                                     <div class="col-md-2 col-3">
                                         <img src="/tktshop/uploads/products/<?= $item['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
@@ -464,7 +598,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                                     </div>
                                     
                                     <!-- Product Info -->
-                                    <div class="col-md-4 col-9">
+                                    <div class="col-md-3 col-9">
                                         <h6 class="mb-1">
                                             <a href="product_detail.php?slug=<?= $item['slug'] ?>" 
                                                class="text-decoration-none text-dark">
@@ -485,7 +619,567 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                                                     Chỉ còn <?= $item['so_luong_ton_kho'] ?> sản phẩm
                                                 </small>
                                             </div>
-                                        <?php endif; ?>
+                                    </div>
+                                    
+                                    <!-- Subtotal -->
+                                    <div class="col-md-2 col-4 text-center">
+                                        <div class="fw-bold subtotal-price" data-price="<?= $item['gia_ban'] ?>" data-quantity="<?= $item['so_luong'] ?>">
+                                            <?= formatPrice($item['so_luong'] * $item['gia_ban']) ?>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger mt-2" 
+                                                onclick="removeItem(<?= $item['id'] ?>)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    
+                    <!-- Continue Shopping -->
+                    <div class="mt-4">
+                        <a href="products.php" class="btn btn-outline-primary">
+                            <i class="fas fa-arrow-left me-2"></i>
+                            Tiếp tục mua sắm
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <?php if (!empty($cart_items)): ?>
+                <!-- Cart Summary -->
+                <div class="col-lg-4">
+                    <div class="cart-summary">
+                        <h5 class="mb-3">Tóm tắt đơn hàng</h5>
+                        
+                        <!-- Selected Items Info -->
+                        <div class="alert alert-info py-2 mb-3" id="selectedInfo">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <small>Chọn sản phẩm để xem tổng tiền</small>
+                        </div>
+                        
+                        <!-- Free Shipping Progress -->
+                        <div class="mb-3" id="shippingProgress" style="display: none;">
+                            <div class="d-flex justify-content-between mb-2">
+                                <small>Mua thêm để được miễn phí ship:</small>
+                                <small class="fw-bold text-primary" id="remainingForFreeShip">
+                                    0đ
+                                </small>
+                            </div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" id="shippingProgressBar" style="width: 0%">
+                                </div>
+                            </div>
+                            <small class="text-muted" id="shippingProgressText">
+                                0đ / 500.000đ
+                            </small>
+                        </div>
+                        
+                        <div class="alert alert-success py-2 mb-3" id="freeShippingAlert" style="display: none;">
+                            <i class="fas fa-check-circle me-1"></i>
+                            <small>Bạn được miễn phí vận chuyển!</small>
+                        </div>
+                        
+                        <!-- Order Summary -->
+                        <div class="border-top pt-3" id="orderSummary">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Tạm tính (<span id="selectedItemCount">0</span> sản phẩm):</span>
+                                <span id="subtotalAmount">0đ</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Phí vận chuyển:</span>
+                                <span id="shippingAmount">0đ</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Thuế (10%):</span>
+                                <span id="taxAmount">0đ</span>
+                            </div>
+                            
+                            <hr>
+                            
+                            <div class="d-flex justify-content-between mb-3">
+                                <strong>Tổng cộng:</strong>
+                                <strong class="text-primary fs-5" id="totalAmount">0đ</strong>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-primary btn-lg" id="checkoutBtn" onclick="proceedToCheckout()" disabled>
+                                    <i class="fas fa-credit-card me-2"></i>
+                                    Thanh toán
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="saveForLater()">
+                                    <i class="fas fa-bookmark me-2"></i>
+                                    Lưu để mua sau
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <!-- Suggested Products -->
+        <?php if (!empty($suggested_products)): ?>
+            <div class="mt-5">
+                <div class="bg-white border rounded-3 p-4">
+                    <h4 class="mb-4">
+                        <?= empty($cart_items) ? 'Sản phẩm nổi bật' : 'Có thể bạn quan tâm' ?>
+                    </h4>
+                    <div class="row">
+                        <?php foreach ($suggested_products as $product): ?>
+                            <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                                <div class="card h-100" style="cursor: pointer;" onclick="location.href='product_detail.php?slug=<?= $product['slug'] ?>'">
+                                    <img src="/tktshop/uploads/products/<?= $product['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
+                                         class="card-img-top" 
+                                         alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
+                                         style="height: 180px; object-fit: cover;"
+                                         onerror="this.src='/tktshop/assets/images/no-image.jpg'">
+                                    <div class="card-body d-flex flex-column">
+                                        <h6 class="card-title"><?= htmlspecialchars($product['ten_san_pham']) ?></h6>
+                                        <div class="text-warning mb-2">
+                                            <?php for ($i = 1; $i <= 5; $i++): ?>
+                                                <i class="fas fa-star<?= $i <= floor($product['diem_danh_gia_tb'] ?? 0) ? '' : ' text-muted' ?> small"></i>
+                                            <?php endfor; ?>
+                                            <small class="text-muted ms-1">(<?= $product['so_luong_danh_gia'] ?? 0 ?>)</small>
+                                        </div>
+                                        <div class="mt-auto">
+                                            <div class="fw-bold text-primary"><?= formatPrice($product['gia_thap_nhat']) ?></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+    </div>
+    
+    <!-- Footer -->
+    <?php include 'includes/footer.php'; ?>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // AJAX Functions for Cart CRUD with Checkbox Selection
+        
+        let selectedItems = new Set();
+        
+        // Show loading
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        // Hide loading
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            let toastContainer = document.getElementById('toastContainer');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toastContainer';
+                toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+                toastContainer.style.zIndex = '10000';
+                document.body.appendChild(toastContainer);
+            }
+            
+            const toastId = 'toast-' + Date.now();
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toast = new bootstrap.Toast(document.getElementById(toastId));
+            toast.show();
+            
+            setTimeout(() => {
+                const toastElement = document.getElementById(toastId);
+                if (toastElement) toastElement.remove();
+            }, 5000);
+        }
+        
+        // Update selection state
+        function updateSelection() {
+            const checkboxes = document.querySelectorAll('.item-checkbox');
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const deleteBtn = document.getElementById('deleteSelected');
+            const selectedCountSpan = document.getElementById('selectedCount');
+            
+            selectedItems.clear();
+            
+            let checkedCount = 0;
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedItems.add(checkbox.dataset.cartId);
+                    checkbox.closest('.cart-item').classList.add('selected');
+                    checkedCount++;
+                } else {
+                    checkbox.closest('.cart-item').classList.remove('selected');
+                }
+            });
+            
+            // Update select all checkbox
+            if (checkedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+            
+            // Update delete button
+            deleteBtn.disabled = checkedCount === 0;
+            selectedCountSpan.textContent = checkedCount;
+            
+            // Calculate totals for selected items
+            calculateSelectedTotals();
+        }
+        
+        // Calculate totals for selected items
+        function calculateSelectedTotals() {
+            if (selectedItems.size === 0) {
+                document.getElementById('selectedInfo').style.display = 'block';
+                document.getElementById('shippingProgress').style.display = 'none';
+                document.getElementById('freeShippingAlert').style.display = 'none';
+                document.getElementById('orderSummary').style.opacity = '0.5';
+                document.getElementById('checkoutBtn').disabled = true;
+                
+                // Reset values
+                document.getElementById('selectedItemCount').textContent = '0';
+                document.getElementById('subtotalAmount').textContent = '0đ';
+                document.getElementById('shippingAmount').textContent = '0đ';
+                document.getElementById('taxAmount').textContent = '0đ';
+                document.getElementById('totalAmount').textContent = '0đ';
+                return;
+            }
+            
+            showLoading();
+            
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=calculate_selected&cart_ids[]=${Array.from(selectedItems).join('&cart_ids[]=')}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                
+                if (data.success) {
+                    const totals = data.totals;
+                    
+                    document.getElementById('selectedInfo').style.display = 'none';
+                    document.getElementById('orderSummary').style.opacity = '1';
+                    document.getElementById('checkoutBtn').disabled = false;
+                    
+                    // Update summary
+                    document.getElementById('selectedItemCount').textContent = totals.selected_count;
+                    document.getElementById('subtotalAmount').textContent = totals.selected_subtotal_formatted;
+                    document.getElementById('shippingAmount').textContent = totals.shipping_fee_formatted;
+                    document.getElementById('taxAmount').textContent = totals.tax_formatted;
+                    document.getElementById('totalAmount').textContent = totals.total_formatted;
+                    
+                    // Update shipping progress
+                    if (totals.free_shipping_remaining > 0) {
+                        document.getElementById('shippingProgress').style.display = 'block';
+                        document.getElementById('freeShippingAlert').style.display = 'none';
+                        
+                        const percentage = (totals.selected_subtotal / 500000) * 100;
+                        document.getElementById('shippingProgressBar').style.width = Math.min(percentage, 100) + '%';
+                        document.getElementById('remainingForFreeShip').textContent = formatPrice(totals.free_shipping_remaining);
+                        document.getElementById('shippingProgressText').textContent = 
+                            `${totals.selected_subtotal_formatted} / 500.000đ`;
+                    } else {
+                        document.getElementById('shippingProgress').style.display = 'none';
+                        document.getElementById('freeShippingAlert').style.display = 'block';
+                    }
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Có lỗi xảy ra khi tính tổng', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // Format price function
+        function formatPrice(amount) {
+            return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+        }
+        
+        // Select all functionality
+        document.getElementById('selectAll').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.item-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateSelection();
+        });
+        
+        // UPDATE QUANTITY
+        function updateQuantity(cartId, newQuantity) {
+            if (newQuantity < 1) return;
+            
+            showLoading();
+            
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=update_quantity&cart_id=${cartId}&quantity=${newQuantity}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                
+                if (data.success) {
+                    // Update subtotal for this item
+                    const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
+                    const subtotalElement = cartItem.querySelector('.subtotal-price');
+                    const quantityInput = cartItem.querySelector('.quantity-input');
+                    const minusBtn = cartItem.querySelector('.quantity-btn:first-child');
+                    const plusBtn = cartItem.querySelector('.quantity-btn:last-child');
+                    
+                    subtotalElement.textContent = data.subtotal;
+                    subtotalElement.dataset.quantity = newQuantity;
+                    quantityInput.value = newQuantity;
+                    
+                    const maxQuantity = parseInt(quantityInput.max);
+                    minusBtn.disabled = newQuantity <= 1;
+                    plusBtn.disabled = newQuantity >= maxQuantity;
+                    
+                    // Recalculate if item is selected
+                    if (selectedItems.has(cartId.toString())) {
+                        calculateSelectedTotals();
+                    }
+                    
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message, 'error');
+                    
+                    if (data.max_quantity) {
+                        const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
+                        const quantityInput = cartItem.querySelector('.quantity-input');
+                        quantityInput.value = data.max_quantity;
+                    }
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Có lỗi xảy ra khi cập nhật', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // REMOVE SINGLE ITEM
+        function removeItem(cartId) {
+            if (!confirm('Bạn có chắc muốn xóa sản phẩm này khỏi giỏ hàng?')) {
+                return;
+            }
+            
+            const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
+            cartItem.classList.add('removing');
+            
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=remove_item&cart_id=${cartId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    cartItem.remove();
+                    selectedItems.delete(cartId.toString());
+                    updateSelection();
+                    showToast(data.message, 'success');
+                    
+                    // Check if cart is empty
+                    if (document.querySelectorAll('.cart-item').length === 0) {
+                        location.reload();
+                    }
+                } else {
+                    cartItem.classList.remove('removing');
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                cartItem.classList.remove('removing');
+                showToast('Có lỗi xảy ra khi xóa sản phẩm', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // REMOVE SELECTED ITEMS
+        function removeSelectedItems() {
+            if (selectedItems.size === 0) {
+                showToast('Vui lòng chọn sản phẩm để xóa', 'error');
+                return;
+            }
+            
+            if (!confirm(`Bạn có chắc muốn xóa ${selectedItems.size} sản phẩm đã chọn?`)) {
+                return;
+            }
+            
+            showLoading();
+            
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=remove_selected&cart_ids[]=${Array.from(selectedItems).join('&cart_ids[]=')}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                
+                if (data.success) {
+                    // Remove items from DOM
+                    selectedItems.forEach(cartId => {
+                        const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
+                        if (cartItem) cartItem.remove();
+                    });
+                    
+                    selectedItems.clear();
+                    updateSelection();
+                    showToast(data.message, 'success');
+                    
+                    // Check if cart is empty
+                    if (document.querySelectorAll('.cart-item').length === 0) {
+                        location.reload();
+                    }
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Có lỗi xảy ra khi xóa sản phẩm', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // CLEAR CART
+        function clearCart() {
+            if (!confirm('Bạn có chắc muốn xóa tất cả sản phẩm trong giỏ hàng?')) {
+                return;
+            }
+            
+            showLoading();
+            
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=clear_cart'
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Có lỗi xảy ra', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // PROCEED TO CHECKOUT
+        function proceedToCheckout() {
+            if (selectedItems.size === 0) {
+                showToast('Vui lòng chọn ít nhất một sản phẩm để thanh toán', 'error');
+                return;
+            }
+            
+            // Store selected items in session for checkout
+            fetch('cart.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=set_checkout_items&cart_ids[]=${Array.from(selectedItems).join('&cart_ids[]=')}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = 'checkout.php';
+                } else {
+                    showToast('Có lỗi xảy ra khi chuẩn bị thanh toán', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Fallback: redirect anyway
+                window.location.href = 'checkout.php';
+            });
+        }
+        
+        // Save for later (future feature)
+        function saveForLater() {
+            showToast('Tính năng lưu để mua sau sẽ được cập nhật sớm!', 'success');
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners to quantity inputs
+            const quantityInputs = document.querySelectorAll('.quantity-input');
+            quantityInputs.forEach(input => {
+                let timeout;
+                input.addEventListener('input', function() {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        const cartId = this.closest('.cart-item').dataset.cartId;
+                        const newQuantity = parseInt(this.value);
+                        if (newQuantity > 0) {
+                            updateQuantity(cartId, newQuantity);
+                        }
+                    }, 500);
+                });
+            });
+            
+            // Add event listeners to item checkboxes
+            const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+            itemCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateSelection);
+            });
+            
+            // Initialize selection
+            updateSelection();
+        });
+    </script>
+</body>
+</html>    <?php endif; ?>
                                     </div>
                                     
                                     <!-- Price -->
@@ -515,384 +1209,3 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                                                 +
                                             </button>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- Subtotal -->
-                                    <div class="col-md-2 col-4 text-center">
-                                        <div class="fw-bold subtotal-price">
-                                            <?= formatPrice($item['so_luong'] * $item['gia_ban']) ?>
-                                        </div>
-                                        <button class="btn btn-sm btn-outline-danger mt-2" 
-                                                onclick="removeItem(<?= $item['id'] ?>)">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                    
-                    <!-- Continue Shopping -->
-                    <div class="mt-4">
-                        <a href="products.php" class="btn btn-outline-primary">
-                            <i class="fas fa-arrow-left me-2"></i>
-                            Tiếp tục mua sắm
-                        </a>
-                    </div>
-                <?php endif; ?>
-            </div>
-            
-            <?php if (!empty($cart_items)): ?>
-                <!-- Cart Summary -->
-                <div class="col-lg-4">
-                    <div class="cart-summary">
-                        <h5 class="mb-3">Tóm tắt đơn hàng</h5>
-                        
-                        <!-- Free Shipping Progress -->
-                        <?php if ($cart_totals['free_shipping_remaining'] > 0): ?>
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between mb-2">
-                                    <small>Mua thêm để được miễn phí ship:</small>
-                                    <small class="fw-bold text-primary">
-                                        <?= formatPrice($cart_totals['free_shipping_remaining']) ?>
-                                    </small>
-                                </div>
-                                <div class="progress mb-2">
-                                    <div class="progress-bar bg-success" 
-                                         style="width: <?= ($cart_totals['subtotal'] / $cart_totals['free_shipping_threshold']) * 100 ?>%">
-                                    </div>
-                                </div>
-                                <small class="text-muted">
-                                    <?= formatPrice($cart_totals['subtotal']) ?> / <?= formatPrice($cart_totals['free_shipping_threshold']) ?>
-                                </small>
-                            </div>
-                        <?php else: ?>
-                            <div class="alert alert-success py-2 mb-3">
-                                <i class="fas fa-check-circle me-1"></i>
-                                <small>Bạn được miễn phí vận chuyển!</small>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <!-- Order Summary -->
-                        <div class="border-top pt-3">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>Tạm tính (<?= $cart_totals['item_count'] ?> sản phẩm):</span>
-                                <span id="subtotalAmount"><?= $cart_totals['subtotal_formatted'] ?></span>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>Phí vận chuyển:</span>
-                                <span id="shippingAmount" class="<?= $cart_totals['shipping_fee'] == 0 ? 'text-success' : '' ?>">
-                                    <?= $cart_totals['shipping_fee'] == 0 ? 'Miễn phí' : $cart_totals['shipping_fee_formatted'] ?>
-                                </span>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>Thuế (10%):</span>
-                                <span id="taxAmount"><?= $cart_totals['tax_formatted'] ?></span>
-                            </div>
-                            
-                            <hr>
-                            
-                            <div class="d-flex justify-content-between mb-3">
-                                <strong>Tổng cộng:</strong>
-                                <strong class="text-primary fs-5" id="totalAmount">
-                                    <?= $cart_totals['total_formatted'] ?>
-                                </strong>
-                            </div>
-                            
-                            <div class="d-grid gap-2">
-                                <a href="checkout.php" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-credit-card me-2"></i>
-                                    Thanh toán
-                                </a>
-                                <button class="btn btn-outline-secondary" onclick="saveForLater()">
-                                    <i class="fas fa-bookmark me-2"></i>
-                                    Lưu để mua sau
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
-        </div>
-        
-        <!-- Suggested Products -->
-        <?php if (!empty($suggested_products)): ?>
-            <div class="suggested-products">
-                <h4 class="mb-4">
-                    <?= empty($cart_items) ? 'Sản phẩm nổi bật' : 'Có thể bạn quan tâm' ?>
-                </h4>
-                <div class="row">
-                    <?php foreach ($suggested_products as $product): ?>
-                        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
-                            <div class="card product-card h-100" onclick="location.href='product_detail.php?slug=<?= $product['slug'] ?>'">
-                                <img src="/tktshop/uploads/products/<?= $product['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
-                                     class="card-img-top" 
-                                     alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
-                                     style="height: 180px; object-fit: cover;"
-                                     onerror="this.src='/tktshop/assets/images/no-image.jpg'">
-                                <div class="card-body d-flex flex-column">
-                                    <h6 class="card-title"><?= htmlspecialchars($product['ten_san_pham']) ?></h6>
-                                    <div class="text-warning mb-2">
-                                        <?php for ($i = 1; $i <= 5; $i++): ?>
-                                            <i class="fas fa-star<?= $i <= floor($product['diem_danh_gia_tb']) ? '' : ' text-muted' ?> small"></i>
-                                        <?php endfor; ?>
-                                        <small class="text-muted ms-1">(<?= $product['so_luong_danh_gia'] ?>)</small>
-                                    </div>
-                                    <div class="mt-auto">
-                                        <div class="fw-bold text-primary"><?= formatPrice($product['gia_thap_nhat']) ?></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        <?php endif; ?>
-    </div>
-    
-    <!-- Footer -->
-    <?php include 'includes/footer.php'; ?>
-    
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <script>
-        // AJAX Functions for Cart CRUD
-        
-        // Show loading
-        function showLoading() {
-            document.getElementById('loadingOverlay').style.display = 'flex';
-        }
-        
-        // Hide loading
-        function hideLoading() {
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-        
-        // Show toast notification
-        function showToast(message, type = 'success') {
-            // Create toast element if not exists
-            let toastContainer = document.getElementById('toastContainer');
-            if (!toastContainer) {
-                toastContainer = document.createElement('div');
-                toastContainer.id = 'toastContainer';
-                toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-                toastContainer.style.zIndex = '9999';
-                document.body.appendChild(toastContainer);
-            }
-            
-            const toastId = 'toast-' + Date.now();
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                </div>
-            `;
-            
-            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-            const toast = new bootstrap.Toast(document.getElementById(toastId));
-            toast.show();
-            
-            // Remove toast element after it hides
-            setTimeout(() => {
-                const toastElement = document.getElementById(toastId);
-                if (toastElement) {
-                    toastElement.remove();
-                }
-            }, 5000);
-        }
-        
-        // Update cart totals in UI
-        function updateCartTotals(totals) {
-            if (totals) {
-                document.getElementById('subtotalAmount').textContent = totals.subtotal_formatted;
-                document.getElementById('shippingAmount').textContent = totals.shipping_fee == 0 ? 'Miễn phí' : totals.shipping_fee_formatted;
-                document.getElementById('shippingAmount').className = totals.shipping_fee == 0 ? 'text-success' : '';
-                document.getElementById('taxAmount').textContent = totals.tax_formatted;
-                document.getElementById('totalAmount').textContent = totals.total_formatted;
-                
-                // Update free shipping progress
-                const progressBar = document.querySelector('.progress-bar');
-                if (progressBar) {
-                    const percentage = (totals.subtotal / totals.free_shipping_threshold) * 100;
-                    progressBar.style.width = Math.min(percentage, 100) + '%';
-                }
-                
-                // Update cart counter in header (if exists)
-                const cartCounter = document.querySelector('.cart-counter');
-                if (cartCounter) {
-                    cartCounter.textContent = totals.item_count;
-                    cartCounter.style.display = totals.item_count > 0 ? 'inline' : 'none';
-                }
-            }
-        }
-        
-        // UPDATE QUANTITY (U in CRUD)
-        function updateQuantity(cartId, newQuantity) {
-            if (newQuantity < 1) return;
-            
-            showLoading();
-            
-            fetch('cart.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=update_quantity&cart_id=${cartId}&quantity=${newQuantity}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                
-                if (data.success) {
-                    // Update subtotal for this item
-                    const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
-                    const subtotalElement = cartItem.querySelector('.subtotal-price');
-                    subtotalElement.textContent = data.subtotal;
-                    
-                    // Update quantity input
-                    const quantityInput = cartItem.querySelector('.quantity-input');
-                    quantityInput.value = newQuantity;
-                    
-                    // Update cart totals
-                    updateCartTotals(data.cart_totals);
-                    
-                    // Update quantity buttons state
-                    const minusBtn = cartItem.querySelector('.quantity-btn:first-child');
-                    const plusBtn = cartItem.querySelector('.quantity-btn:last-child');
-                    const maxQuantity = parseInt(quantityInput.max);
-                    
-                    minusBtn.disabled = newQuantity <= 1;
-                    plusBtn.disabled = newQuantity >= maxQuantity;
-                    
-                    showToast(data.message, 'success');
-                } else {
-                    showToast(data.message, 'error');
-                    
-                    // Reset quantity if failed
-                    if (data.max_quantity) {
-                        const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
-                        const quantityInput = cartItem.querySelector('.quantity-input');
-                        quantityInput.value = data.max_quantity;
-                    }
-                }
-            })
-            .catch(error => {
-                hideLoading();
-                showToast('Có lỗi xảy ra khi cập nhật', 'error');
-                console.error('Error:', error);
-            });
-        }
-        
-        // REMOVE ITEM (D in CRUD)
-        function removeItem(cartId) {
-            if (!confirm('Bạn có chắc muốn xóa sản phẩm này khỏi giỏ hàng?')) {
-                return;
-            }
-            
-            const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
-            cartItem.classList.add('removing');
-            
-            fetch('cart.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=remove_item&cart_id=${cartId}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Remove item from DOM
-                    cartItem.remove();
-                    
-                    // Update cart totals
-                    updateCartTotals(data.cart_totals);
-                    
-                    showToast(data.message, 'success');
-                    
-                    // Check if cart is empty
-                    const remainingItems = document.querySelectorAll('.cart-item').length;
-                    if (remainingItems === 0) {
-                        location.reload(); // Reload to show empty cart message
-                    }
-                } else {
-                    cartItem.classList.remove('removing');
-                    showToast(data.message, 'error');
-                }
-            })
-            .catch(error => {
-                cartItem.classList.remove('removing');
-                showToast('Có lỗi xảy ra khi xóa sản phẩm', 'error');
-                console.error('Error:', error);
-            });
-        }
-        
-        // CLEAR CART (D in CRUD)
-        function clearCart() {
-            if (!confirm('Bạn có chắc muốn xóa tất cả sản phẩm trong giỏ hàng?')) {
-                return;
-            }
-            
-            showLoading();
-            
-            fetch('cart.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: 'action=clear_cart'
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                
-                if (data.success) {
-                    showToast(data.message, 'success');
-                    setTimeout(() => {
-                        location.reload();
-                    }, 1000);
-                } else {
-                    showToast(data.message, 'error');
-                }
-            })
-            .catch(error => {
-                hideLoading();
-                showToast('Có lỗi xảy ra', 'error');
-                console.error('Error:', error);
-            });
-        }
-        
-        // Save for later (future feature)
-        function saveForLater() {
-            showToast('Tính năng lưu để mua sau sẽ được cập nhật sớm!', 'success');
-        }
-        
-        // Auto-save cart when quantity changes
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add debounce to quantity inputs
-            const quantityInputs = document.querySelectorAll('.quantity-input');
-            quantityInputs.forEach(input => {
-                let timeout;
-                input.addEventListener('input', function() {
-                    clearTimeout(timeout);
-                    timeout = setTimeout(() => {
-                        const cartId = this.closest('.cart-item').dataset.cartId;
-                        const newQuantity = parseInt(this.value);
-                        if (newQuantity > 0) {
-                            updateQuantity(cartId, newQuantity);
-                        }
-                    }, 500); // Wait 500ms after user stops typing
-                });
-            });
-        });
-    </script>
-</body>
-</html>
