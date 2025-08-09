@@ -1,8 +1,8 @@
 <?php
-// customer/checkout.php - FINAL FIXED VERSION
+// customer/checkout.php - UPDATED FOR CART CHECKBOX SYSTEM
 /**
- * Thanh toán - Tương thích hoàn toàn với VNPay có sẵn và COD
- * 🔧 FIXED: Kết nối với VNPay config có sẵn + COD hoàn chỉnh
+ * Thanh toán - Tương thích hoàn toàn với VNPay có sẵn và COD + Cart Checkbox
+ * 🔧 FIXED: Đồng bộ với hệ thống checkbox cart + tính thuế chính xác
  */
 
 require_once '../config/database.php';
@@ -12,35 +12,75 @@ require_once '../config/config.php';
 $customer_id = $_SESSION['customer_id'] ?? null;
 $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
 
-// Lấy sản phẩm trong giỏ hàng
-$stmt = $pdo->prepare("
-    SELECT gh.*, sp.id as san_pham_id, sp.ten_san_pham, sp.hinh_anh_chinh, sp.slug, sp.thuong_hieu,
-           bsp.ma_sku, bsp.gia_ban as gia_hien_tai, bsp.so_luong_ton_kho,
-           kc.kich_co, ms.ten_mau, ms.ma_mau,
-           (gh.so_luong * gh.gia_tai_thoi_diem) as thanh_tien
-    FROM gio_hang gh
-    JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
-    JOIN san_pham_chinh sp ON bsp.san_pham_id = sp.id
-    JOIN kich_co kc ON bsp.kich_co_id = kc.id
-    JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
-    WHERE (gh.khach_hang_id = ? OR gh.session_id = ?) 
-    AND bsp.trang_thai = 'hoat_dong' 
-    AND sp.trang_thai = 'hoat_dong'
-    AND bsp.so_luong_ton_kho >= gh.so_luong
-    ORDER BY gh.ngay_them DESC
-");
-$stmt->execute([$customer_id, $session_id]);
-$cart_items = $stmt->fetchAll();
+// 🔧 NEW: Lấy sản phẩm đã chọn từ session (từ cart checkbox)
+$checkout_item_ids = $_SESSION['checkout_items'] ?? [];
 
-// Redirect nếu giỏ hàng trống
-if (empty($cart_items)) {
-    alert('Giỏ hàng của bạn đang trống!', 'warning');
-    redirect('/customer/cart.php');
+$checkout_items = [];
+$subtotal = 0;
+$total_quantity = 0;
+
+if (($customer_id || $session_id) && !empty($checkout_item_ids)) {
+    // Lấy thông tin chi tiết các sản phẩm đã chọn
+    $placeholders = str_repeat('?,', count($checkout_item_ids) - 1) . '?';
+    $params = array_merge($checkout_item_ids, [$customer_id, $session_id]);
+    
+    $stmt = $pdo->prepare("
+        SELECT gh.*, sp.id as san_pham_id, sp.ten_san_pham, sp.hinh_anh_chinh, sp.slug, sp.thuong_hieu,
+               bsp.ma_sku, bsp.gia_ban as gia_hien_tai, bsp.so_luong_ton_kho,
+               kc.kich_co, ms.ten_mau, ms.ma_mau,
+               (gh.so_luong * gh.gia_tai_thoi_diem) as thanh_tien
+        FROM gio_hang gh
+        JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
+        JOIN san_pham_chinh sp ON bsp.san_pham_id = sp.id
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE gh.id IN ($placeholders) AND (gh.khach_hang_id = ? OR gh.session_id = ?) 
+        AND bsp.trang_thai = 'hoat_dong' 
+        AND sp.trang_thai = 'hoat_dong'
+        AND bsp.so_luong_ton_kho >= gh.so_luong
+        ORDER BY gh.ngay_them DESC
+    ");
+    $stmt->execute($params);
+    $checkout_items = $stmt->fetchAll();
+    
+    // Tính tổng cho các items đã chọn
+    foreach ($checkout_items as $item) {
+        $subtotal += $item['thanh_tien'];
+        $total_quantity += $item['so_luong'];
+    }
+} else {
+    // Fallback: Lấy tất cả sản phẩm trong giỏ hàng nếu không có selection
+    $stmt = $pdo->prepare("
+        SELECT gh.*, sp.id as san_pham_id, sp.ten_san_pham, sp.hinh_anh_chinh, sp.slug, sp.thuong_hieu,
+               bsp.ma_sku, bsp.gia_ban as gia_hien_tai, bsp.so_luong_ton_kho,
+               kc.kich_co, ms.ten_mau, ms.ma_mau,
+               (gh.so_luong * gh.gia_tai_thoi_diem) as thanh_tien
+        FROM gio_hang gh
+        JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
+        JOIN san_pham_chinh sp ON bsp.san_pham_id = sp.id
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE (gh.khach_hang_id = ? OR gh.session_id = ?) 
+        AND bsp.trang_thai = 'hoat_dong' 
+        AND sp.trang_thai = 'hoat_dong'
+        AND bsp.so_luong_ton_kho >= gh.so_luong
+        ORDER BY gh.ngay_them DESC
+    ");
+    $stmt->execute([$customer_id, $session_id]);
+    $checkout_items = $stmt->fetchAll();
+    
+    // Tính tổng cho tất cả items
+    foreach ($checkout_items as $item) {
+        $subtotal += $item['thanh_tien'];
+        $total_quantity += $item['so_luong'];
+    }
 }
 
-// Tính tổng tiền
-$subtotal = array_sum(array_column($cart_items, 'thanh_tien'));
-$total_quantity = array_sum(array_column($cart_items, 'so_luong'));
+// Redirect nếu giỏ hàng trống
+if (empty($checkout_items)) {
+    alert('Vui lòng chọn sản phẩm trong giỏ hàng để thanh toán!', 'warning');
+    redirect('/customer/cart.php');
+}
 
 // Lấy thông tin khách hàng nếu đã đăng nhập
 $customer_info = [];
@@ -85,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $errors[] = 'Địa chỉ giao hàng không được để trống';
     }
     
-    // Tính phí vận chuyển
+    // 🔧 NEW: Tính phí vận chuyển và thuế chính xác
     $phi_van_chuyen = 0;
     if ($subtotal < 500000) { // Miễn phí vận chuyển cho đơn từ 500k
         switch ($form_data['phuong_thuc_van_chuyen']) {
@@ -101,7 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
     
-    $total_amount = $subtotal + $phi_van_chuyen;
+    // 🔧 NEW: Thêm thuế 10% như trong cart
+    $thue = $subtotal * 0.1;
+    $total_amount = $subtotal + $phi_van_chuyen + $thue;
     
     // Tạo đơn hàng nếu không có lỗi
     if (empty($errors)) {
@@ -111,13 +153,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Tạo mã đơn hàng
             $ma_don_hang = 'DH' . date('YmdHis') . rand(100, 999);
             
-            // 🔧 FIX: INSERT đúng số cột và giá trị (BỎ tien_giam_gia)
+            // 🔧 FIX: INSERT với thuế
             $stmt = $pdo->prepare("
                 INSERT INTO don_hang 
                 (ma_don_hang, khach_hang_id, ho_ten_nhan, so_dien_thoai_nhan, email_nhan, 
-                 dia_chi_nhan, ghi_chu_khach_hang, tong_tien_hang, phi_van_chuyen,
+                 dia_chi_nhan, ghi_chu_khach_hang, tong_tien_hang, phi_van_chuyen, thue,
                  tong_thanh_toan, phuong_thuc_thanh_toan, phuong_thuc_van_chuyen, trang_thai_thanh_toan) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
             $stmt->execute([
@@ -130,6 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $form_data['ghi_chu_khach_hang'],
                 $subtotal, 
                 $phi_van_chuyen,
+                $thue, // 🔧 NEW: Thêm thuế
                 $total_amount,
                 $form_data['phuong_thuc_thanh_toan'], 
                 $form_data['phuong_thuc_van_chuyen'],
@@ -138,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             $don_hang_id = $pdo->lastInsertId();
             
-            // Insert chi tiết đơn hàng
+            // Insert chi tiết đơn hàng (chỉ cho items đã chọn)
             $stmt_ctdh = $pdo->prepare("
                 INSERT INTO chi_tiet_don_hang 
                 (don_hang_id, san_pham_id, bien_the_id, ten_san_pham, thuong_hieu, 
@@ -146,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            foreach ($cart_items as $item) {
+            foreach ($checkout_items as $item) {
                 $stmt_ctdh->execute([
                     $don_hang_id, 
                     $item['san_pham_id'], 
@@ -184,8 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 // 🔧 COD: Xử lý đơn hàng COD
                 $pdo->beginTransaction();
                 
-                // Trừ tồn kho
-                foreach ($cart_items as $item) {
+                // Trừ tồn kho cho items đã chọn
+                foreach ($checkout_items as $item) {
                     $pdo->prepare("
                         UPDATE bien_the_san_pham 
                         SET so_luong_ton_kho = so_luong_ton_kho - ?,
@@ -194,11 +237,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     ")->execute([$item['so_luong'], $item['so_luong'], $item['bien_the_id']]);
                 }
                 
-                // Xóa giỏ hàng
-                $pdo->prepare("
-                    DELETE FROM gio_hang 
-                    WHERE khach_hang_id = ? OR session_id = ?
-                ")->execute([$customer_id, $session_id]);
+                // 🔧 NEW: Xóa chỉ items đã chọn khỏi giỏ hàng
+                if (!empty($checkout_item_ids)) {
+                    $placeholders = str_repeat('?,', count($checkout_item_ids) - 1) . '?';
+                    $params = array_merge($checkout_item_ids, [$customer_id, $session_id]);
+                    
+                    $pdo->prepare("
+                        DELETE FROM gio_hang 
+                        WHERE id IN ($placeholders) AND (khach_hang_id = ? OR session_id = ?)
+                    ")->execute($params);
+                } else {
+                    // Fallback: Xóa tất cả
+                    $pdo->prepare("
+                        DELETE FROM gio_hang 
+                        WHERE khach_hang_id = ? OR session_id = ?
+                    ")->execute([$customer_id, $session_id]);
+                }
                 
                 // Cập nhật trạng thái đơn hàng COD
                 $pdo->prepare("
@@ -209,6 +263,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 ")->execute([$don_hang_id]);
                 
                 $pdo->commit();
+                
+                // 🔧 NEW: Xóa checkout items khỏi session
+                unset($_SESSION['checkout_items']);
                 
                 // Thông báo thành công và chuyển đến trang success
                 alert('Đặt hàng thành công! Mã đơn hàng: ' . $ma_don_hang, 'success');
@@ -231,9 +288,10 @@ if (isset($_GET['error']) && $_GET['error'] === 'vnpay') {
     }
 }
 
-// Tính phí vận chuyển mặc định
+// 🔧 NEW: Tính phí vận chuyển và thuế mặc định
 $phi_van_chuyen = $subtotal >= 500000 ? 0 : 30000;
-$total_amount = $subtotal + $phi_van_chuyen;
+$thue = $subtotal * 0.1; // Thuế 10%
+$total_amount = $subtotal + $phi_van_chuyen + $thue;
 ?>
 
 <!DOCTYPE html>
@@ -369,6 +427,14 @@ $total_amount = $subtotal + $phi_van_chuyen;
         .cod-icon {
             color: #28a745;
         }
+        
+        .selected-items-info {
+            background: #e7f3ff;
+            border: 1px solid #b6d7ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -391,6 +457,19 @@ $total_amount = $subtotal + $phi_van_chuyen;
                         <li><?= htmlspecialchars($error) ?></li>
                     <?php endforeach; ?>
                 </ul>
+            </div>
+        <?php endif; ?>
+        
+        <!-- 🔧 NEW: Selected Items Info -->
+        <?php if (!empty($checkout_item_ids)): ?>
+            <div class="selected-items-info">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    <div>
+                        <strong>Thanh toán <?= count($checkout_items) ?> sản phẩm đã chọn</strong>
+                        <div class="text-muted small">Các sản phẩm khác trong giỏ hàng sẽ được giữ lại</div>
+                    </div>
+                </div>
             </div>
         <?php endif; ?>
         
@@ -468,7 +547,9 @@ $total_amount = $subtotal + $phi_van_chuyen;
                                     <div class="text-muted small mt-1">Giao trong 1-2 ngày</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="fw-bold" id="shipping-cost-nhanh">30.000đ</div>
+                                    <div class="fw-bold" id="shipping-cost-nhanh">
+                                        <?= $subtotal >= 500000 ? '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
+                                    </div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
                                 </div>
                             </div>
@@ -482,7 +563,7 @@ $total_amount = $subtotal + $phi_van_chuyen;
                                     <div class="text-muted small mt-1">Giao trong 3-5 ngày</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="fw-bold">20.000đ</div>
+                                    <div class="fw-bold"><?= $subtotal >= 500000 ? 'Miễn phí' : '20.000đ' ?></div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
                                 </div>
                             </div>
@@ -575,7 +656,7 @@ $total_amount = $subtotal + $phi_van_chuyen;
                         
                         <!-- Products -->
                         <div class="mb-4">
-                            <?php foreach ($cart_items as $item): ?>
+                            <?php foreach ($checkout_items as $item): ?>
                                 <div class="product-item">
                                     <div class="d-flex">
                                         <div class="me-3">
@@ -608,6 +689,12 @@ $total_amount = $subtotal + $phi_van_chuyen;
                         <div class="summary-row">
                             <span>Phí vận chuyển:</span>
                             <span id="shippingAmount"><?= $phi_van_chuyen == 0 ? 'Miễn phí' : formatPrice($phi_van_chuyen) ?></span>
+                        </div>
+                        
+                        <!-- 🔧 NEW: Hiển thị thuế -->
+                        <div class="summary-row">
+                            <span>Thuế (10%):</span>
+                            <span id="taxAmount"><?= formatPrice($thue) ?></span>
                         </div>
                         
                         <?php if ($subtotal >= 500000): ?>
@@ -662,6 +749,7 @@ $total_amount = $subtotal + $phi_van_chuyen;
     
     <script>
         const subtotal = <?= $subtotal ?>;
+        const taxRate = 0.1; // 10% thuế
         let currentShippingFee = <?= $phi_van_chuyen ?>;
         
         // Select shipping method
@@ -673,14 +761,22 @@ $total_amount = $subtotal + $phi_van_chuyen;
             // Update radio
             document.querySelector(`input[value="${method}"]`).checked = true;
             
-            // Calculate shipping fee (free if order >= 500k)
-            const finalFee = subtotal >= 500000 ? 0 : fee;
+            // Calculate shipping fee (free if order >= 500k, except hoa_toc)
+            let finalFee = fee;
+            if (subtotal >= 500000 && method !== 'giao_hang_hoa_toc') {
+                finalFee = 0;
+            }
             currentShippingFee = finalFee;
+            
+            // Calculate tax and total
+            const tax = subtotal * taxRate;
+            const total = subtotal + finalFee + tax;
             
             // Update display
             document.getElementById('shippingAmount').textContent = 
                 finalFee === 0 ? 'Miễn phí' : formatPrice(finalFee);
-            document.getElementById('totalAmount').textContent = formatPrice(subtotal + finalFee);
+            document.getElementById('taxAmount').textContent = formatPrice(tax);
+            document.getElementById('totalAmount').textContent = formatPrice(total);
         }
         
         // Select payment method
@@ -765,12 +861,6 @@ $total_amount = $subtotal + $phi_van_chuyen;
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize shipping fee display for free shipping
-            if (subtotal >= 500000) {
-                document.getElementById('shipping-cost-nhanh').innerHTML = 
-                    '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>';
-            }
-            
             // Phone number formatting
             const phoneInput = document.querySelector('[name="so_dien_thoai_nhan"]');
             if (phoneInput) {
@@ -796,6 +886,9 @@ $total_amount = $subtotal + $phi_van_chuyen;
                     }
                 });
             });
+            
+            // Display initial totals correctly
+            console.log('Checkout initialized - Subtotal:', subtotal, 'Shipping:', currentShippingFee, 'Tax:', subtotal * taxRate, 'Total:', subtotal + currentShippingFee + (subtotal * taxRate));
         });
         
         // Toast notification
