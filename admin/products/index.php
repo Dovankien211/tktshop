@@ -218,10 +218,10 @@ try {
                                                                class="btn btn-outline-warning" title="Sửa">
                                                                 <i class="fas fa-edit"></i>
                                                             </a>
-                                                            <button type="button" class="btn btn-outline-danger" 
-                                                                    onclick="deleteProduct(<?= $product['id'] ?>)" title="Xóa">
+                                                            <a href="delete.php?id=<?= $product['id'] ?>" 
+                                                               class="btn btn-outline-danger" title="Xóa">
                                                                 <i class="fas fa-trash"></i>
-                                                            </button>
+                                                            </a>
                                                         </div>
                                                     </td>
                                                 </tr>
