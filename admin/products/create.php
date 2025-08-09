@@ -1,27 +1,10 @@
 <?php
-// admin/products/create.php - COMPLETE REWRITE
-/**
- * Thêm sản phẩm mới - Fixed all issues
- */
-
 session_start();
 require_once '../../config/database.php';
 require_once '../../config/config.php';
 
-// 🔧 FIX: Kiểm tra đăng nhập admin (hỗ trợ cả user_id và admin_id)
-$is_admin = false;
-
-if (isset($_SESSION['admin_id'])) {
-    // Nếu có admin_id
-    $is_admin = true;
-    $admin_id = $_SESSION['admin_id'];
-} elseif (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-    // Nếu có user_id với role admin
-    $is_admin = true;
-    $admin_id = $_SESSION['user_id'];
-}
-
-if (!$is_admin) {
+// Kiểm tra quyền admin
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     header('Location: ../../admin/login.php');
     exit();
 }
@@ -32,108 +15,54 @@ $success = '';
 // Lấy danh sách danh mục
 $categories = [];
 try {
-    $stmt = $pdo->query("SELECT id, ten_danh_muc FROM danh_muc_giay WHERE trang_thai = 'hoat_dong' ORDER BY ten_danh_muc");
+    $stmt = $pdo->query("SELECT * FROM danh_muc_giay WHERE trang_thai = 'hoat_dong' ORDER BY ten_danh_muc ASC");
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $error = "Lỗi khi tải danh mục: " . $e->getMessage();
 }
 
-// Helper function để tạo slug
-function createSlug($string) {
-    $slug = trim($string);
-    $slug = mb_strtolower($slug, 'UTF-8');
-    
-    // Chuyển đổi ký tự tiếng Việt
-    $vietnamese = [
-        'á'=>'a', 'à'=>'a', 'ả'=>'a', 'ã'=>'a', 'ạ'=>'a', 'ă'=>'a', 'ắ'=>'a', 'ằ'=>'a', 'ẳ'=>'a', 'ẵ'=>'a', 'ặ'=>'a',
-        'â'=>'a', 'ấ'=>'a', 'ầ'=>'a', 'ẩ'=>'a', 'ẫ'=>'a', 'ậ'=>'a',
-        'é'=>'e', 'è'=>'e', 'ẻ'=>'e', 'ẽ'=>'e', 'ẹ'=>'e', 'ê'=>'e', 'ế'=>'e', 'ề'=>'e', 'ể'=>'e', 'ễ'=>'e', 'ệ'=>'e',
-        'í'=>'i', 'ì'=>'i', 'ỉ'=>'i', 'ĩ'=>'i', 'ị'=>'i',
-        'ó'=>'o', 'ò'=>'o', 'ỏ'=>'o', 'õ'=>'o', 'ọ'=>'o', 'ô'=>'o', 'ố'=>'o', 'ồ'=>'o', 'ổ'=>'o', 'ỗ'=>'o', 'ộ'=>'o',
-        'ơ'=>'o', 'ớ'=>'o', 'ờ'=>'o', 'ở'=>'o', 'ỡ'=>'o', 'ợ'=>'o',
-        'ú'=>'u', 'ù'=>'u', 'ủ'=>'u', 'ũ'=>'u', 'ụ'=>'u', 'ư'=>'u', 'ứ'=>'u', 'ừ'=>'u', 'ử'=>'u', 'ữ'=>'u', 'ự'=>'u',
-        'ý'=>'y', 'ỳ'=>'y', 'ỷ'=>'y', 'ỹ'=>'y', 'ỵ'=>'y',
-        'đ'=>'d'
-    ];
-    
-    $slug = strtr($slug, $vietnamese);
-    $slug = preg_replace('/[^a-z0-9\s-]/', '', $slug);
-    $slug = preg_replace('/[\s-]+/', '-', $slug);
-    $slug = trim($slug, '-');
-    
-    return $slug;
-}
-
-// Helper function để upload ảnh
-function uploadImage($file, $directory) {
-    if (!isset($file) || $file['error'] !== UPLOAD_ERR_OK) {
-        return false;
-    }
-    
-    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!in_array($file['type'], $allowed_types)) {
-        return false;
-    }
-    
-    $max_size = 5 * 1024 * 1024; // 5MB
-    if ($file['size'] > $max_size) {
-        return false;
-    }
-    
-    $upload_dir = "../../uploads/{$directory}/";
-    if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = uniqid() . '_' . time() . '.' . $extension;
-    $filepath = $upload_dir . $filename;
-    
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-        return $filename;
-    }
-    
-    return false;
-}
-
-// Helper function để sanitize input
-function sanitizeInput($input) {
-    return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
-}
-
 // Xử lý form submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // Lấy và validate dữ liệu
-        $ten_san_pham = sanitizeInput($_POST['ten_san_pham'] ?? '');
-        $ma_san_pham = sanitizeInput($_POST['ma_san_pham'] ?? '');
-        $mo_ta_ngan = sanitizeInput($_POST['mo_ta_ngan'] ?? '');
-        $mo_ta_chi_tiet = $_POST['mo_ta_chi_tiet'] ?? ''; // Giữ nguyên HTML từ CKEditor
-        $danh_muc_id = (int)($_POST['danh_muc_id'] ?? 0);
-        $thuong_hieu = sanitizeInput($_POST['thuong_hieu'] ?? '');
-        $gia_goc = (int)($_POST['gia_goc'] ?? 0);
+        // Validate dữ liệu
+        $required_fields = [
+            'ten_san_pham' => 'Tên sản phẩm',
+            'thuong_hieu' => 'Thương hiệu',
+            'danh_muc_id' => 'Danh mục',
+            'gia_goc' => 'Giá gốc',
+            'mo_ta_ngan' => 'Mô tả ngắn'
+        ];
+        
+        foreach ($required_fields as $field => $label) {
+            if (empty($_POST[$field])) {
+                throw new Exception("$label không được để trống!");
+            }
+        }
+        
+        // Lấy dữ liệu từ form
+        $ten_san_pham = trim($_POST['ten_san_pham']);
+        $thuong_hieu = trim($_POST['thuong_hieu']);
+        $danh_muc_id = (int)$_POST['danh_muc_id'];
+        $gia_goc = (int)$_POST['gia_goc'];
         $gia_khuyen_mai = !empty($_POST['gia_khuyen_mai']) ? (int)$_POST['gia_khuyen_mai'] : null;
-        $san_pham_noi_bat = isset($_POST['san_pham_noi_bat']) ? 1 : 0;
-        $san_pham_moi = isset($_POST['san_pham_moi']) ? 1 : 0;
-
-        // Validation
-        if (empty($ten_san_pham)) {
-            throw new Exception("Tên sản phẩm không được để trống");
-        }
+        $mo_ta_ngan = trim($_POST['mo_ta_ngan']);
+        $mo_ta_chi_tiet = trim($_POST['mo_ta_chi_tiet'] ?? '');
+        $tu_khoa_tim_kiem = trim($_POST['tu_khoa_tim_kiem'] ?? '');
+        $trang_thai = $_POST['trang_thai'] ?? 'hoat_dong';
         
-        if ($danh_muc_id <= 0) {
-            throw new Exception("Vui lòng chọn danh mục");
-        }
-        
+        // Validate giá
         if ($gia_goc <= 0) {
-            throw new Exception("Giá gốc phải lớn hơn 0");
+            throw new Exception("Giá gốc phải lớn hơn 0!");
         }
         
         if ($gia_khuyen_mai && $gia_khuyen_mai >= $gia_goc) {
-            throw new Exception("Giá khuyến mãi phải nhỏ hơn giá gốc");
+            throw new Exception("Giá khuyến mãi phải nhỏ hơn giá gốc!");
         }
-
-        // Tạo slug tự động
+        
+        // Tạo mã sản phẩm tự động
+        $ma_san_pham = strtoupper($thuong_hieu . '-' . date('YmdHis') . '-' . rand(100, 999));
+        
+        // Tạo slug
         $slug = createSlug($ten_san_pham);
         
         // Kiểm tra slug trùng lặp
@@ -143,75 +72,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $slug .= '-' . time();
         }
         
-        // Kiểm tra mã sản phẩm trùng lặp
-        if (!empty($ma_san_pham)) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM san_pham_chinh WHERE ma_san_pham = ?");
-            $stmt->execute([$ma_san_pham]);
-            if ($stmt->fetchColumn() > 0) {
-                throw new Exception("Mã sản phẩm đã tồn tại");
-            }
-        }
-
         // Xử lý upload ảnh chính
         $hinh_anh_chinh = null;
         if (isset($_FILES['hinh_anh_chinh']) && $_FILES['hinh_anh_chinh']['error'] === UPLOAD_ERR_OK) {
-            $hinh_anh_chinh = uploadImage($_FILES['hinh_anh_chinh'], 'products');
-            if (!$hinh_anh_chinh) {
-                throw new Exception("Lỗi upload ảnh chính");
+            $upload_result = uploadFile($_FILES['hinh_anh_chinh'], 'products');
+            if ($upload_result['success']) {
+                $hinh_anh_chinh = $upload_result['filename'];
+            } else {
+                throw new Exception("Lỗi upload ảnh chính: " . $upload_result['message']);
             }
         }
-
-        // Xử lý upload album ảnh
-        $album_hinh_anh = [];
-        if (isset($_FILES['album_hinh_anh'])) {
-            foreach ($_FILES['album_hinh_anh']['tmp_name'] as $key => $tmp_name) {
-                if ($_FILES['album_hinh_anh']['error'][$key] === UPLOAD_ERR_OK) {
+        
+        // Xử lý upload ảnh phụ
+        $hinh_anh_phu = [];
+        if (isset($_FILES['hinh_anh_phu']) && is_array($_FILES['hinh_anh_phu']['name'])) {
+            for ($i = 0; $i < count($_FILES['hinh_anh_phu']['name']); $i++) {
+                if ($_FILES['hinh_anh_phu']['error'][$i] === UPLOAD_ERR_OK) {
                     $file = [
-                        'name' => $_FILES['album_hinh_anh']['name'][$key],
-                        'type' => $_FILES['album_hinh_anh']['type'][$key],
-                        'tmp_name' => $tmp_name,
-                        'error' => $_FILES['album_hinh_anh']['error'][$key],
-                        'size' => $_FILES['album_hinh_anh']['size'][$key]
+                        'name' => $_FILES['hinh_anh_phu']['name'][$i],
+                        'type' => $_FILES['hinh_anh_phu']['type'][$i],
+                        'tmp_name' => $_FILES['hinh_anh_phu']['tmp_name'][$i],
+                        'error' => $_FILES['hinh_anh_phu']['error'][$i],
+                        'size' => $_FILES['hinh_anh_phu']['size'][$i]
                     ];
-                    $uploaded = uploadImage($file, 'products');
-                    if ($uploaded) {
-                        $album_hinh_anh[] = $uploaded;
+                    
+                    $upload_result = uploadFile($file, 'products');
+                    if ($upload_result['success']) {
+                        $hinh_anh_phu[] = $upload_result['filename'];
                     }
                 }
             }
         }
-
-        // Insert vào database
+        
+        $hinh_anh_phu_json = !empty($hinh_anh_phu) ? json_encode($hinh_anh_phu) : null;
+        
+        // Bắt đầu transaction
+        $pdo->beginTransaction();
+        
+        // Insert sản phẩm chính
         $sql = "INSERT INTO san_pham_chinh (
-                    ten_san_pham, slug, ma_san_pham, mo_ta_ngan, mo_ta_chi_tiet, 
-                    danh_muc_id, thuong_hieu, hinh_anh_chinh, album_hinh_anh, 
-                    gia_goc, gia_khuyen_mai, san_pham_noi_bat, san_pham_moi, nguoi_tao,
-                    ngay_tao
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-
+                    ma_san_pham, ten_san_pham, slug, thuong_hieu, danh_muc_id,
+                    gia_goc, gia_khuyen_mai, mo_ta_ngan, mo_ta_chi_tiet,
+                    hinh_anh_chinh, hinh_anh_phu, tu_khoa_tim_kiem, trang_thai,
+                    ngay_tao, ngay_cap_nhat
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+        
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
-            $ten_san_pham, $slug, $ma_san_pham, $mo_ta_ngan, $mo_ta_chi_tiet,
-            $danh_muc_id, $thuong_hieu, $hinh_anh_chinh, 
-            !empty($album_hinh_anh) ? json_encode($album_hinh_anh) : null,
-            $gia_goc, $gia_khuyen_mai, $san_pham_noi_bat, $san_pham_moi, 
-            $admin_id
+            $ma_san_pham, $ten_san_pham, $slug, $thuong_hieu, $danh_muc_id,
+            $gia_goc, $gia_khuyen_mai, $mo_ta_ngan, $mo_ta_chi_tiet,
+            $hinh_anh_chinh, $hinh_anh_phu_json, $tu_khoa_tim_kiem, $trang_thai
         ]);
-
-        $product_id = $pdo->lastInsertId();
-        $success = "Thêm sản phẩm thành công! ID: #" . $product_id;
         
-        // Tự động chuyển đến trang quản lý biến thể sau 2 giây
-        echo "<script>
-            setTimeout(function() {
-                window.location.href = 'variants.php?product_id=" . $product_id . "';
-            }, 2000);
-        </script>";
-
+        $product_id = $pdo->lastInsertId();
+        
+        // Commit transaction
+        $pdo->commit();
+        
+        $success = "Thêm sản phẩm thành công! Bây giờ bạn có thể thêm biến thể cho sản phẩm.";
+        
+        // Redirect đến trang quản lý biến thể
+        header("Location: variants.php?product_id=" . $product_id . "&success=" . urlencode($success));
+        exit();
+        
     } catch (Exception $e) {
+        // Rollback transaction nếu có lỗi
+        if ($pdo->inTransaction()) {
+            $pdo->rollback();
+        }
+        
+        // Xóa file đã upload nếu có lỗi
+        if (isset($hinh_anh_chinh)) {
+            deleteUploadedFile($hinh_anh_chinh, 'products');
+        }
+        if (isset($hinh_anh_phu)) {
+            foreach ($hinh_anh_phu as $filename) {
+                deleteUploadedFile($filename, 'products');
+            }
+        }
+        
         $error = $e->getMessage();
     }
 }
+
+$page_title = "Thêm sản phẩm mới";
+$breadcrumbs = [
+    ['title' => 'Dashboard', 'url' => '../dashboard.php'],
+    ['title' => 'Sản phẩm', 'url' => 'index.php'],
+    ['title' => 'Thêm mới', 'url' => 'create.php']
+];
 ?>
 
 <!DOCTYPE html>
@@ -219,183 +168,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thêm sản phẩm mới - TKT Shop Admin</title>
-    
-    <!-- CSS -->
+    <title><?= $page_title ?> - TKT Shop Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- CKEditor -->
-    <script src="https://cdn.ckeditor.com/4.16.2/standard/ckeditor.js"></script>
-    
     <style>
-        .main-content {
-            background: #f8f9fa;
-            min-height: 100vh;
+        .image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 8px;
         }
-        
-        .page-header {
-            background: white;
-            padding: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        
-        .form-card {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        
-        .card-header-custom {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 10px 10px 0 0;
-            border: none;
-        }
-        
-        .form-section {
-            padding: 25px;
-        }
-        
         .upload-area {
             border: 2px dashed #ddd;
             border-radius: 8px;
-            padding: 30px;
+            padding: 2rem;
             text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
+            transition: border-color 0.3s ease;
         }
-        
         .upload-area:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
+            border-color: #007bff;
         }
-        
         .upload-area.dragover {
-            border-color: #667eea;
-            background: #e3f2fd;
+            border-color: #007bff;
+            background-color: #f8f9fa;
         }
-        
-        .preview-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .preview-item {
-            position: relative;
-            width: 100px;
-            height: 100px;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 2px solid #ddd;
-        }
-        
-        .preview-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .preview-remove {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        
-        .price-input {
-            position: relative;
-        }
-        
-        .price-input::before {
-            content: 'VNĐ';
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
-        
-        .btn-save {
-            background: linear-gradient(135deg, #28a745, #20c997);
-            border: none;
-            padding: 12px 30px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-save:hover {
-            background: linear-gradient(135deg, #20c997, #28a745);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
-        }
-        
-        .feature-toggle {
+        .form-section {
             background: #f8f9fa;
-            padding: 15px;
             border-radius: 8px;
-            border: 1px solid #dee2e6;
-            margin-bottom: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
         }
-        
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 24px;
-        }
-        
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 24px;
-        }
-        
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        
-        input:checked + .toggle-slider {
-            background-color: #28a745;
-        }
-        
-        input:checked + .toggle-slider:before {
-            transform: translateX(26px);
+        .required {
+            color: #dc3545;
         }
     </style>
 </head>
@@ -403,305 +207,264 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
+            <div class="col-md-2 p-0">
+                <?php include '../layouts/sidebar.php'; ?>
+            </div>
             
-            <!-- Main Content -->
-            <div class="col-md-10 main-content">
-                <!-- Page Header -->
-                <div class="page-header">
-                    <div class="container">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h2 class="mb-1">
-                                    <i class="fas fa-plus-circle me-2 text-success"></i>
-                                    Thêm sản phẩm mới
-                                </h2>
-                                <nav aria-label="breadcrumb">
-                                    <ol class="breadcrumb mb-0">
-                                        <li class="breadcrumb-item"><a href="../dashboard.php">Dashboard</a></li>
-                                        <li class="breadcrumb-item"><a href="index.php">Sản phẩm</a></li>
-                                        <li class="breadcrumb-item active">Thêm mới</li>
-                                    </ol>
-                                </nav>
-                            </div>
-                            <div>
-                                <a href="index.php" class="btn btn-outline-secondary">
-                                    <i class="fas fa-arrow-left me-1"></i>Quay lại
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="container">
-                    <!-- Alerts -->
+            <!-- Main content -->
+            <div class="col-md-10">
+                <!-- Header -->
+                <?php include '../layouts/header.php'; ?>
+                
+                <div class="p-4">
+                    <!-- Alert Messages -->
                     <?php if ($error): ?>
                         <div class="alert alert-danger alert-dismissible fade show">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <strong>Lỗi!</strong> <?= htmlspecialchars($error) ?>
+                            <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($success): ?>
                         <div class="alert alert-success alert-dismissible fade show">
-                            <i class="fas fa-check-circle me-2"></i>
-                            <strong>Thành công!</strong> <?= htmlspecialchars($success) ?>
-                            <div class="mt-2">
-                                <small><i class="fas fa-info-circle me-1"></i>Đang chuyển đến trang quản lý biến thể...</small>
-                            </div>
+                            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
 
-                    <!-- Form -->
                     <form method="POST" enctype="multipart/form-data" id="productForm">
                         <div class="row">
                             <!-- Left Column - Main Info -->
-                            <div class="col-lg-8">
-                                <!-- Basic Information -->
-                                <div class="form-card">
-                                    <div class="card-header-custom">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-info-circle me-2"></i>
-                                            Thông tin cơ bản
-                                        </h5>
+                            <div class="col-md-8">
+                                <!-- Thông tin cơ bản -->
+                                <div class="form-section">
+                                    <h5 class="mb-3">
+                                        <i class="fas fa-info-circle me-2"></i>Thông tin cơ bản
+                                    </h5>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="ten_san_pham" class="form-label">
+                                                    Tên sản phẩm <span class="required">*</span>
+                                                </label>
+                                                <input type="text" class="form-control" id="ten_san_pham" name="ten_san_pham" 
+                                                       value="<?= htmlspecialchars($_POST['ten_san_pham'] ?? '') ?>" required>
+                                                <div class="form-text">Tên sản phẩm sẽ hiển thị cho khách hàng</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="thuong_hieu" class="form-label">
+                                                    Thương hiệu <span class="required">*</span>
+                                                </label>
+                                                <input type="text" class="form-control" id="thuong_hieu" name="thuong_hieu" 
+                                                       value="<?= htmlspecialchars($_POST['thuong_hieu'] ?? '') ?>" 
+                                                       list="brandsList" required>
+                                                <datalist id="brandsList">
+                                                    <option value="Nike">
+                                                    <option value="Adidas">
+                                                    <option value="Converse">
+                                                    <option value="Vans">
+                                                    <option value="Puma">
+                                                    <option value="New Balance">
+                                                    <option value="Fila">
+                                                </datalist>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="form-section">
-                                        <div class="row">
-                                            <div class="col-md-8">
-                                                <div class="mb-3">
-                                                    <label for="ten_san_pham" class="form-label">
-                                                        Tên sản phẩm <span class="text-danger">*</span>
-                                                    </label>
-                                                    <input type="text" 
-                                                           class="form-control" 
-                                                           id="ten_san_pham" 
-                                                           name="ten_san_pham" 
-                                                           value="<?= htmlspecialchars($_POST['ten_san_pham'] ?? '') ?>" 
-                                                           required
-                                                           placeholder="Nhập tên sản phẩm...">
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label for="ma_san_pham" class="form-label">Mã sản phẩm</label>
-                                                    <input type="text" 
-                                                           class="form-control" 
-                                                           id="ma_san_pham" 
-                                                           name="ma_san_pham" 
-                                                           value="<?= htmlspecialchars($_POST['ma_san_pham'] ?? '') ?>"
-                                                           placeholder="Tự động tạo nếu để trống">
-                                                </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="danh_muc_id" class="form-label">
+                                                    Danh mục <span class="required">*</span>
+                                                </label>
+                                                <select class="form-select" id="danh_muc_id" name="danh_muc_id" required>
+                                                    <option value="">Chọn danh mục</option>
+                                                    <?php foreach ($categories as $category): ?>
+                                                        <option value="<?= $category['id'] ?>" 
+                                                                <?= (($_POST['danh_muc_id'] ?? '') == $category['id']) ? 'selected' : '' ?>>
+                                                            <?= htmlspecialchars($category['ten_danh_muc']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
                                         </div>
-
-                                        <div class="mb-3">
-                                            <label for="mo_ta_ngan" class="form-label">Mô tả ngắn</label>
-                                            <textarea class="form-control" 
-                                                      id="mo_ta_ngan" 
-                                                      name="mo_ta_ngan" 
-                                                      rows="3"
-                                                      placeholder="Mô tả ngắn gọn về sản phẩm..."><?= htmlspecialchars($_POST['mo_ta_ngan'] ?? '') ?></textarea>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label for="mo_ta_chi_tiet" class="form-label">Mô tả chi tiết</label>
-                                            <textarea class="form-control" 
-                                                      id="mo_ta_chi_tiet" 
-                                                      name="mo_ta_chi_tiet" 
-                                                      rows="8"><?= htmlspecialchars($_POST['mo_ta_chi_tiet'] ?? '') ?></textarea>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="trang_thai" class="form-label">Trạng thái</label>
+                                                <select class="form-select" id="trang_thai" name="trang_thai">
+                                                    <option value="hoat_dong" <?= (($_POST['trang_thai'] ?? 'hoat_dong') === 'hoat_dong') ? 'selected' : '' ?>>
+                                                        Hoạt động
+                                                    </option>
+                                                    <option value="an" <?= (($_POST['trang_thai'] ?? '') === 'an') ? 'selected' : '' ?>>
+                                                        Ẩn sản phẩm
+                                                    </option>
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Images -->
-                                <div class="form-card">
-                                    <div class="card-header-custom">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-images me-2"></i>
-                                            Hình ảnh sản phẩm
-                                        </h5>
+                                <!-- Giá bán -->
+                                <div class="form-section">
+                                    <h5 class="mb-3">
+                                        <i class="fas fa-money-bill-wave me-2"></i>Giá bán
+                                    </h5>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="gia_goc" class="form-label">
+                                                    Giá gốc <span class="required">*</span>
+                                                </label>
+                                                <div class="input-group">
+                                                    <input type="number" class="form-control" id="gia_khuyen_mai" name="gia_khuyen_mai" 
+                                                           value="<?= htmlspecialchars($_POST['gia_khuyen_mai'] ?? '') ?>" 
+                                                           min="1000" step="1000">
+                                                    <span class="input-group-text">₫</span>
+                                                </div>
+                                                <div class="form-text">Giá bán có khuyến mãi (để trống nếu không có)</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="form-section">
-                                        <!-- Main Image -->
-                                        <div class="mb-4">
-                                            <label class="form-label">Ảnh chính sản phẩm</label>
-                                            <div class="upload-area" onclick="document.getElementById('hinh_anh_chinh').click()">
-                                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                                                <h6>Click để tải ảnh chính</h6>
-                                                <p class="text-muted mb-0">Hỗ trợ: JPG, PNG, GIF (tối đa 5MB)</p>
+                                    
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div class="alert alert-info">
+                                                <i class="fas fa-info-circle"></i>
+                                                <strong>Lưu ý:</strong> Giá của từng biến thể (size, màu) có thể khác nhau và sẽ được thiết lập sau khi tạo sản phẩm.
                                             </div>
-                                            <input type="file" 
-                                                   id="hinh_anh_chinh" 
-                                                   name="hinh_anh_chinh" 
-                                                   accept="image/*" 
-                                                   style="display: none;"
-                                                   onchange="previewMainImage(this)">
-                                            <div id="main-preview" class="preview-container"></div>
                                         </div>
+                                    </div>
+                                </div>
 
-                                        <!-- Album Images -->
-                                        <div class="mb-3">
-                                            <label class="form-label">Album ảnh</label>
-                                            <div class="upload-area" onclick="document.getElementById('album_hinh_anh').click()">
-                                                <i class="fas fa-images fa-3x text-muted mb-3"></i>
-                                                <h6>Click để tải nhiều ảnh</h6>
-                                                <p class="text-muted mb-0">Có thể chọn nhiều ảnh cùng lúc</p>
-                                            </div>
-                                            <input type="file" 
-                                                   id="album_hinh_anh" 
-                                                   name="album_hinh_anh[]" 
-                                                   accept="image/*" 
-                                                   multiple
-                                                   style="display: none;"
-                                                   onchange="previewAlbumImages(this)">
-                                            <div id="album-preview" class="preview-container"></div>
+                                <!-- Mô tả sản phẩm -->
+                                <div class="form-section">
+                                    <h5 class="mb-3">
+                                        <i class="fas fa-file-alt me-2"></i>Mô tả sản phẩm
+                                    </h5>
+                                    
+                                    <div class="mb-3">
+                                        <label for="mo_ta_ngan" class="form-label">
+                                            Mô tả ngắn <span class="required">*</span>
+                                        </label>
+                                        <textarea class="form-control" id="mo_ta_ngan" name="mo_ta_ngan" rows="3" 
+                                                  maxlength="200" required><?= htmlspecialchars($_POST['mo_ta_ngan'] ?? '') ?></textarea>
+                                        <div class="form-text">
+                                            Mô tả ngắn gọn về sản phẩm (tối đa 200 ký tự)
+                                            <span id="shortDescCount">0/200</span>
                                         </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="mo_ta_chi_tiet" class="form-label">Mô tả chi tiết</label>
+                                        <textarea class="form-control" id="mo_ta_chi_tiet" name="mo_ta_chi_tiet" rows="8"><?= htmlspecialchars($_POST['mo_ta_chi_tiet'] ?? '') ?></textarea>
+                                        <div class="form-text">Mô tả chi tiết về sản phẩm, chất liệu, tính năng...</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="tu_khoa_tim_kiem" class="form-label">Từ khóa tìm kiếm</label>
+                                        <input type="text" class="form-control" id="tu_khoa_tim_kiem" name="tu_khoa_tim_kiem" 
+                                               value="<?= htmlspecialchars($_POST['tu_khoa_tim_kiem'] ?? '') ?>">
+                                        <div class="form-text">Các từ khóa để tìm kiếm sản phẩm, cách nhau bằng dấu phẩy</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Right Column - Properties -->
-                            <div class="col-lg-4">
-                                <!-- Category & Brand -->
-                                <div class="form-card">
-                                    <div class="card-header-custom">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-tags me-2"></i>
-                                            Phân loại
-                                        </h5>
+                            <!-- Right Column - Images -->
+                            <div class="col-md-4">
+                                <!-- Ảnh sản phẩm -->
+                                <div class="form-section">
+                                    <h5 class="mb-3">
+                                        <i class="fas fa-images me-2"></i>Hình ảnh sản phẩm
+                                    </h5>
+                                    
+                                    <!-- Ảnh chính -->
+                                    <div class="mb-4">
+                                        <label for="hinh_anh_chinh" class="form-label">
+                                            Ảnh chính <span class="required">*</span>
+                                        </label>
+                                        <div class="upload-area" id="mainImageUpload">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <p class="mb-2">Kéo thả ảnh vào đây hoặc click để chọn</p>
+                                            <input type="file" class="form-control" id="hinh_anh_chinh" name="hinh_anh_chinh" 
+                                                   accept="image/*" style="display: none;">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" 
+                                                    onclick="document.getElementById('hinh_anh_chinh').click()">
+                                                Chọn ảnh chính
+                                            </button>
+                                        </div>
+                                        <div id="mainImagePreview"></div>
+                                        <div class="form-text">Ảnh chính hiển thị trên danh sách sản phẩm (tối đa 2MB)</div>
                                     </div>
-                                    <div class="form-section">
-                                        <div class="mb-3">
-                                            <label for="danh_muc_id" class="form-label">
-                                                Danh mục <span class="text-danger">*</span>
-                                            </label>
-                                            <select class="form-select" id="danh_muc_id" name="danh_muc_id" required>
-                                                <option value="">Chọn danh mục</option>
-                                                <?php foreach ($categories as $category): ?>
-                                                    <option value="<?= $category['id'] ?>" 
-                                                            <?= (isset($_POST['danh_muc_id']) && $_POST['danh_muc_id'] == $category['id']) ? 'selected' : '' ?>>
-                                                        <?= htmlspecialchars($category['ten_danh_muc']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                    
+                                    <!-- Ảnh phụ -->
+                                    <div class="mb-4">
+                                        <label for="hinh_anh_phu" class="form-label">Ảnh phụ</label>
+                                        <div class="upload-area" id="subImagesUpload">
+                                            <i class="fas fa-images fa-2x text-muted mb-2"></i>
+                                            <p class="mb-2">Thêm nhiều ảnh cho sản phẩm</p>
+                                            <input type="file" class="form-control" id="hinh_anh_phu" name="hinh_anh_phu[]" 
+                                                   accept="image/*" multiple style="display: none;">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                                    onclick="document.getElementById('hinh_anh_phu').click()">
+                                                Chọn ảnh phụ
+                                            </button>
                                         </div>
-
-                                        <div class="mb-3">
-                                            <label for="thuong_hieu" class="form-label">Thương hiệu</label>
-                                            <input type="text" 
-                                                   class="form-control" 
-                                                   id="thuong_hieu" 
-                                                   name="thuong_hieu" 
-                                                   value="<?= htmlspecialchars($_POST['thuong_hieu'] ?? '') ?>"
-                                                   placeholder="Nike, Adidas, Converse...">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Pricing -->
-                                <div class="form-card">
-                                    <div class="card-header-custom">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-dollar-sign me-2"></i>
-                                            Giá bán
-                                        </h5>
-                                    </div>
-                                    <div class="form-section">
-                                        <div class="mb-3">
-                                            <label for="gia_goc" class="form-label">
-                                                Giá gốc <span class="text-danger">*</span>
-                                            </label>
-                                            <div class="price-input">
-                                                <input type="number" 
-                                                       class="form-control" 
-                                                       id="gia_goc" 
-                                                       name="gia_goc" 
-                                                       value="<?= $_POST['gia_goc'] ?? '' ?>" 
-                                                       required
-                                                       min="1000"
-                                                       step="1000"
-                                                       placeholder="0">
-                                            </div>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label for="gia_khuyen_mai" class="form-label">Giá khuyến mãi</label>
-                                            <div class="price-input">
-                                                <input type="number" 
-                                                       class="form-control" 
-                                                       id="gia_khuyen_mai" 
-                                                       name="gia_khuyen_mai" 
-                                                       value="<?= $_POST['gia_khuyen_mai'] ?? '' ?>"
-                                                       min="1000"
-                                                       step="1000"
-                                                       placeholder="Để trống nếu không khuyến mãi">
-                                            </div>
-                                            <div class="form-text">
-                                                <small>Giá khuyến mãi phải nhỏ hơn giá gốc</small>
-                                            </div>
-                                        </div>
+                                        <div id="subImagesPreview"></div>
+                                        <div class="form-text">Có thể chọn nhiều ảnh (tối đa 5 ảnh, mỗi ảnh 2MB)</div>
                                     </div>
                                 </div>
 
-                                <!-- Features -->
-                                <div class="form-card">
-                                    <div class="card-header-custom">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-star me-2"></i>
-                                            Tính năng đặc biệt
-                                        </h5>
+                                <!-- Hướng dẫn -->
+                                <div class="card bg-light">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-lightbulb me-2"></i>Hướng dẫn
+                                        </h6>
                                     </div>
-                                    <div class="form-section">
-                                        <div class="feature-toggle">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <strong>Sản phẩm nổi bật</strong>
-                                                    <div class="text-muted small">Hiển thị ở trang chủ</div>
-                                                </div>
-                                                <label class="toggle-switch">
-                                                    <input type="checkbox" 
-                                                           name="san_pham_noi_bat" 
-                                                           value="1" 
-                                                           <?= isset($_POST['san_pham_noi_bat']) ? 'checked' : '' ?>>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                            </div>
-                                        </div>
-
-                                        <div class="feature-toggle">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <strong>Sản phẩm mới</strong>
-                                                    <div class="text-muted small">Hiển thị nhãn "NEW"</div>
-                                                </div>
-                                                <label class="toggle-switch">
-                                                    <input type="checkbox" 
-                                                           name="san_pham_moi" 
-                                                           value="1" 
-                                                           <?= isset($_POST['san_pham_moi']) ? 'checked' : '' ?>>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                            </div>
-                                        </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled mb-0">
+                                            <li class="mb-2">
+                                                <i class="fas fa-check text-success me-2"></i>
+                                                Điền đầy đủ thông tin cơ bản
+                                            </li>
+                                            <li class="mb-2">
+                                                <i class="fas fa-check text-success me-2"></i>
+                                                Upload ảnh chất lượng cao
+                                            </li>
+                                            <li class="mb-2">
+                                                <i class="fas fa-check text-success me-2"></i>
+                                                Sau khi tạo, thêm biến thể
+                                            </li>
+                                            <li class="mb-0">
+                                                <i class="fas fa-check text-success me-2"></i>
+                                                Kiểm tra trước khi lưu
+                                            </li>
+                                        </ul>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <!-- Submit Button -->
-                                <div class="form-card">
-                                    <div class="form-section">
-                                        <button type="submit" class="btn btn-save w-100">
-                                            <i class="fas fa-save me-2"></i>
-                                            Tạo sản phẩm
+                        <!-- Action Buttons -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <a href="index.php" class="btn btn-outline-secondary">
+                                            <i class="fas fa-arrow-left me-2"></i>Quay lại danh sách
+                                        </a>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-outline-primary me-2" onclick="previewProduct()">
+                                            <i class="fas fa-eye me-2"></i>Xem trước
                                         </button>
-                                        
-                                        <div class="mt-3 text-center">
-                                            <small class="text-muted">
-                                                <i class="fas fa-info-circle me-1"></i>
-                                                Sau khi tạo sẽ chuyển đến trang thêm biến thể
-                                            </small>
-                                        </div>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-save me-2"></i>Lưu sản phẩm
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -712,86 +475,141 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Scripts -->
+    <!-- Preview Modal -->
+    <div class="modal fade" id="previewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-eye me-2"></i>Xem trước sản phẩm
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="previewContent">
+                    <!-- Preview content will be generated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-success" onclick="submitForm()">
+                        <i class="fas fa-save me-2"></i>Lưu sản phẩm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script>
-        // Initialize CKEditor
-        CKEDITOR.replace('mo_ta_chi_tiet', {
-            height: 200,
-            toolbar: [
-                ['Bold', 'Italic', 'Underline'],
-                ['NumberedList', 'BulletedList'],
-                ['Link', 'Unlink'],
-                ['Source']
-            ]
+        // Character count for short description
+        document.getElementById('mo_ta_ngan').addEventListener('input', function() {
+            const count = this.value.length;
+            document.getElementById('shortDescCount').textContent = count + '/200';
+            
+            if (count > 200) {
+                this.value = this.value.substring(0, 200);
+                document.getElementById('shortDescCount').textContent = '200/200';
+            }
         });
 
-        // Auto generate product code
-        document.getElementById('ten_san_pham').addEventListener('input', function() {
-            const productName = this.value;
-            const maField = document.getElementById('ma_san_pham');
+        // Image upload handlers
+        document.getElementById('hinh_anh_chinh').addEventListener('change', function() {
+            previewMainImage(this);
+        });
+
+        document.getElementById('hinh_anh_phu').addEventListener('change', function() {
+            previewSubImages(this);
+        });
+
+        // Drag and drop for main image
+        const mainUpload = document.getElementById('mainImageUpload');
+        mainUpload.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+
+        mainUpload.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+
+        mainUpload.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
             
-            if (maField.value === '') {
-                // Simple slug for product code
-                let code = productName.toUpperCase()
-                    .replace(/[^A-Z0-9\s]/g, '')
-                    .replace(/\s+/g, '')
-                    .substring(0, 10);
-                
-                if (code) {
-                    maField.value = code + '-' + Date.now().toString().slice(-4);
-                }
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('hinh_anh_chinh').files = files;
+                previewMainImage(document.getElementById('hinh_anh_chinh'));
             }
         });
 
         // Preview main image
         function previewMainImage(input) {
-            const preview = document.getElementById('main-preview');
+            const preview = document.getElementById('mainImagePreview');
             preview.innerHTML = '';
             
             if (input.files && input.files[0]) {
                 const file = input.files[0];
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const div = document.createElement('div');
-                        div.className = 'preview-item';
-                        div.innerHTML = `
-                            <img src="${e.target.result}" alt="Preview">
-                            <button type="button" class="preview-remove" onclick="removeMainImage()">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        `;
-                        preview.appendChild(div);
-                    };
-                    reader.readAsDataURL(file);
+                
+                // Validate file size
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('Ảnh quá lớn! Vui lòng chọn ảnh nhỏ hơn 2MB.');
+                    input.value = '';
+                    return;
                 }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.innerHTML = `
+                        <div class="mt-3">
+                            <img src="${e.target.result}" class="image-preview" alt="Preview">
+                            <div class="mt-2">
+                                <small class="text-muted">${file.name} (${formatFileSize(file.size)})</small>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="removeMainImage()">
+                                    <i class="fas fa-times"></i> Xóa
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                };
+                reader.readAsDataURL(file);
             }
         }
 
-        // Preview album images
-        function previewAlbumImages(input) {
-            const preview = document.getElementById('album-preview');
+        // Preview sub images
+        function previewSubImages(input) {
+            const preview = document.getElementById('subImagesPreview');
             preview.innerHTML = '';
             
             if (input.files) {
+                if (input.files.length > 5) {
+                    alert('Tối đa 5 ảnh phụ!');
+                    return;
+                }
+                
                 Array.from(input.files).forEach((file, index) => {
-                    if (file.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            const div = document.createElement('div');
-                            div.className = 'preview-item';
-                            div.innerHTML = `
-                                <img src="${e.target.result}" alt="Preview ${index + 1}">
-                                <button type="button" class="preview-remove" onclick="removeAlbumImage(${index})">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            `;
-                            preview.appendChild(div);
-                        };
-                        reader.readAsDataURL(file);
+                    if (file.size > 2 * 1024 * 1024) {
+                        alert(`Ảnh ${file.name} quá lớn! Vui lòng chọn ảnh nhỏ hơn 2MB.`);
+                        return;
                     }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const imageDiv = document.createElement('div');
+                        imageDiv.className = 'mt-2 d-flex align-items-center';
+                        imageDiv.innerHTML = `
+                            <img src="${e.target.result}" class="image-preview me-2" style="width: 60px; height: 60px;" alt="Preview">
+                            <div class="flex-grow-1">
+                                <small class="text-muted">${file.name}</small><br>
+                                <small class="text-muted">${formatFileSize(file.size)}</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSubImage(${index})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        `;
+                        preview.appendChild(imageDiv);
+                    };
+                    reader.readAsDataURL(file);
                 });
             }
         }
@@ -799,12 +617,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Remove main image
         function removeMainImage() {
             document.getElementById('hinh_anh_chinh').value = '';
-            document.getElementById('main-preview').innerHTML = '';
+            document.getElementById('mainImagePreview').innerHTML = '';
         }
 
-        // Remove album image
-        function removeAlbumImage(index) {
-            const input = document.getElementById('album_hinh_anh');
+        // Remove sub image
+        function removeSubImage(index) {
+            const input = document.getElementById('hinh_anh_phu');
             const dt = new DataTransfer();
             
             Array.from(input.files).forEach((file, i) => {
@@ -814,61 +632,165 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
             
             input.files = dt.files;
-            previewAlbumImages(input);
+            previewSubImages(input);
         }
 
-        // Validate form before submit
-        document.getElementById('productForm').addEventListener('submit', function(e) {
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Preview product
+        function previewProduct() {
+            const formData = new FormData(document.getElementById('productForm'));
+            
+            // Validate required fields
+            const requiredFields = ['ten_san_pham', 'thuong_hieu', 'danh_muc_id', 'gia_goc', 'mo_ta_ngan'];
+            let isValid = true;
+            
+            requiredFields.forEach(field => {
+                const input = document.querySelector(`[name="${field}"]`);
+                if (!input.value.trim()) {
+                    input.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+            
+            if (!isValid) {
+                alert('Vui lòng điền đầy đủ thông tin bắt buộc!');
+                return;
+            }
+            
+            // Generate preview
+            const preview = generatePreview(formData);
+            document.getElementById('previewContent').innerHTML = preview;
+            
+            // Show modal
+            new bootstrap.Modal(document.getElementById('previewModal')).show();
+        }
+
+        // Generate preview HTML
+        function generatePreview(formData) {
+            const ten_san_pham = formData.get('ten_san_pham');
+            const thuong_hieu = formData.get('thuong_hieu');
+            const gia_goc = parseInt(formData.get('gia_goc'));
+            const gia_khuyen_mai = formData.get('gia_khuyen_mai') ? parseInt(formData.get('gia_khuyen_mai')) : null;
+            const mo_ta_ngan = formData.get('mo_ta_ngan');
+            
+            const mainImage = document.getElementById('hinh_anh_chinh').files[0];
+            const mainImageSrc = mainImage ? URL.createObjectURL(mainImage) : '/tktshop/uploads/products/no-image.jpg';
+            
+            return `
+                <div class="row">
+                    <div class="col-md-5">
+                        <img src="${mainImageSrc}" class="img-fluid rounded" alt="Product Preview">
+                    </div>
+                    <div class="col-md-7">
+                        <h4>${ten_san_pham}</h4>
+                        <p class="text-muted">Thương hiệu: <strong>${thuong_hieu}</strong></p>
+                        <div class="mb-3">
+                            ${gia_khuyen_mai ? 
+                                `<h5 class="text-danger">${formatPrice(gia_khuyen_mai)} <small class="text-muted text-decoration-line-through">${formatPrice(gia_goc)}</small></h5>` :
+                                `<h5 class="text-primary">${formatPrice(gia_goc)}</h5>`
+                            }
+                        </div>
+                        <p>${mo_ta_ngan}</p>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Đây là bản xem trước. Biến thể (size, màu) sẽ được thêm sau khi lưu sản phẩm.
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Format price for preview
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        // Submit form
+        function submitForm() {
+            document.getElementById('productForm').submit();
+        }
+
+        // Price validation
+        document.getElementById('gia_khuyen_mai').addEventListener('change', function() {
             const giaGoc = parseInt(document.getElementById('gia_goc').value);
-            const giaKhuyenMai = parseInt(document.getElementById('gia_khuyen_mai').value);
+            const giaKhuyenMai = parseInt(this.value);
             
             if (giaKhuyenMai && giaKhuyenMai >= giaGoc) {
-                e.preventDefault();
                 alert('Giá khuyến mãi phải nhỏ hơn giá gốc!');
-                return false;
+                this.value = '';
+            }
+        });
+
+        // Form validation on submit
+        document.getElementById('productForm').addEventListener('submit', function(e) {
+            const requiredFields = ['ten_san_pham', 'thuong_hieu', 'danh_muc_id', 'gia_goc', 'mo_ta_ngan'];
+            let isValid = true;
+            
+            requiredFields.forEach(field => {
+                const input = document.querySelector(`[name="${field}"]`);
+                if (!input.value.trim()) {
+                    input.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+            
+            if (!isValid) {
+                e.preventDefault();
+                alert('Vui lòng điền đầy đủ thông tin bắt buộc!');
+                return;
             }
             
             // Show loading
             const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang tạo...';
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang lưu...';
             submitBtn.disabled = true;
-            
-            // Re-enable after 10 seconds (in case of errors)
-            setTimeout(() => {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            }, 10000);
         });
 
-        // Drag and drop for images
-        ['hinh_anh_chinh', 'album_hinh_anh'].forEach(id => {
-            const uploadArea = document.querySelector(`input[name="${id}"]`).closest('.form-section').querySelector('.upload-area');
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-dismiss alerts
+            setTimeout(() => {
+                const alerts = document.querySelectorAll('.alert');
+                alerts.forEach(alert => {
+                    if (alert.querySelector('.btn-close')) {
+                        alert.querySelector('.btn-close').click();
+                    }
+                });
+            }, 5000);
             
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                this.classList.add('dragover');
-            });
-            
-            uploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-            });
-            
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-                
-                const input = document.getElementById(id);
-                input.files = e.dataTransfer.files;
-                
-                if (id === 'hinh_anh_chinh') {
-                    previewMainImage(input);
-                } else {
-                    previewAlbumImages(input);
-                }
-            });
+            // Update character count on load
+            const descInput = document.getElementById('mo_ta_ngan');
+            if (descInput.value) {
+                document.getElementById('shortDescCount').textContent = descInput.value.length + '/200';
+            }
         });
     </script>
 </body>
-</html>
+</html>_goc" name="gia_goc" 
+                                                           value="<?= htmlspecialchars($_POST['gia_goc'] ?? '') ?>" 
+                                                           min="1000" step="1000" required>
+                                                    <span class="input-group-text">₫</span>
+                                                </div>
+                                                <div class="form-text">Giá bán chính thức của sản phẩm</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="gia_khuyen_mai" class="form-label">Giá khuyến mãi</label>
+                                                <div class="input-group">
+                                                    <input type="number" class="form-control" id="gia
