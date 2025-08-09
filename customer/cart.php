@@ -223,6 +223,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra khi tính tổng']);
             }
             exit;
+
+        // SET CHECKOUT ITEMS - Lưu sản phẩm đã chọn để checkout (NEW FEATURE)
+        case 'set_checkout_items':
+            $cart_ids = $_POST['cart_ids'] ?? [];
+            
+            if (empty($cart_ids) || !is_array($cart_ids)) {
+                echo json_encode(['success' => false, 'message' => 'Không có sản phẩm nào được chọn']);
+                exit;
+            }
+            
+            // Lưu danh sách ID đã chọn vào session để dùng ở checkout
+            $_SESSION['checkout_items'] = $cart_ids;
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Đã chuẩn bị dữ liệu thanh toán',
+                'selected_count' => count($cart_ids)
+            ]);
+            exit;
             
         // THÊM SẢN PHẨM (CREATE) - từ product detail
         case 'add_to_cart':
@@ -405,6 +424,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
         .cart-item.selected {
             border-color: #0d6efd;
             background: #f8f9ff;
+            box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
         }
         
         .cart-item.removing {
@@ -492,6 +512,103 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             font-size: 2rem;
         }
         
+        .search-results-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .search-result-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .search-result-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .search-result-item img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        
+        .search-result-info h6 {
+            margin: 0;
+            font-size: 14px;
+        }
+        
+        .search-result-info .price {
+            color: #0d6efd;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .search-no-results {
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+        }
+        
+        #scrollToTop {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: none;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        
+        #scrollToTop:hover {
+            background: #0b5ed7;
+            transform: translateY(-2px);
+        }
+        
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-slideOut {
+            animation: slideOut 0.3s ease-out forwards;
+        }
+        
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(-100%); }
+        }
+        
         @media (max-width: 768px) {
             .product-image {
                 width: 80px;
@@ -501,6 +618,10 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             .cart-summary {
                 position: static;
                 margin-top: 30px;
+            }
+            
+            .cart-actions {
+                padding: 10px;
             }
         }
     </style>
@@ -619,6 +740,36 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                                                     Chỉ còn <?= $item['so_luong_ton_kho'] ?> sản phẩm
                                                 </small>
                                             </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    
+                                    <!-- Price -->
+                                    <div class="col-md-2 col-4 text-center">
+                                        <div class="fw-bold text-primary"><?= formatPrice($item['gia_ban']) ?></div>
+                                    </div>
+                                    
+                                    <!-- Quantity Controls -->
+                                    <div class="col-md-2 col-4">
+                                        <div class="quantity-controls input-group">
+                                            <button class="btn btn-outline-secondary quantity-btn" 
+                                                    type="button" 
+                                                    onclick="updateQuantity(<?= $item['id'] ?>, <?= $item['so_luong'] - 1 ?>)"
+                                                    <?= $item['so_luong'] <= 1 ? 'disabled' : '' ?>>
+                                                -
+                                            </button>
+                                            <input type="number" 
+                                                   class="form-control quantity-input" 
+                                                   value="<?= $item['so_luong'] ?>"
+                                                   min="1" 
+                                                   max="<?= $item['so_luong_ton_kho'] ?>"
+                                                   onchange="updateQuantity(<?= $item['id'] ?>, this.value)">
+                                            <button class="btn btn-outline-secondary quantity-btn" 
+                                                    type="button"
+                                                    onclick="updateQuantity(<?= $item['id'] ?>, <?= $item['so_luong'] + 1 ?>)"
+                                                    <?= $item['so_luong'] >= $item['so_luong_ton_kho'] ? 'disabled' : '' ?>>
+                                                +
+                                            </button>
+                                        </div>
                                     </div>
                                     
                                     <!-- Subtotal -->
@@ -757,11 +908,17 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
         <?php endif; ?>
     </div>
     
+    <!-- Scroll to Top Button -->
+    <button id="scrollToTop" title="Lên đầu trang">
+        <i class="fas fa-chevron-up"></i>
+    </button>
+    
     <!-- Footer -->
     <?php include 'includes/footer.php'; ?>
     
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/tktshop/assets/js/main.js"></script>
     
     <script>
         // AJAX Functions for Cart CRUD with Checkbox Selection
@@ -790,11 +947,14 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             }
             
             const toastId = 'toast-' + Date.now();
+            const iconClass = type === 'success' ? 'check-circle' : 'exclamation-circle';
+            const bgClass = type === 'success' ? 'success' : 'danger';
+            
             const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert">
+                <div id="${toastId}" class="toast align-items-center text-white bg-${bgClass} border-0 animate-fadeIn" role="alert">
                     <div class="d-flex">
                         <div class="toast-body">
-                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                            <i class="fas fa-${iconClass} me-2"></i>
                             ${message}
                         </div>
                         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
@@ -812,12 +972,13 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             }, 5000);
         }
         
-        // Update selection state
+        // Update selection state and calculate totals
         function updateSelection() {
             const checkboxes = document.querySelectorAll('.item-checkbox');
             const selectAllCheckbox = document.getElementById('selectAll');
             const deleteBtn = document.getElementById('deleteSelected');
             const selectedCountSpan = document.getElementById('selectedCount');
+            const totalItemsSpan = document.getElementById('totalItems');
             
             selectedItems.clear();
             
@@ -832,7 +993,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 }
             });
             
-            // Update select all checkbox
+            // Update select all checkbox state
             if (checkedCount === 0) {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
@@ -844,13 +1005,23 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 selectAllCheckbox.indeterminate = true;
             }
             
-            // Update delete button
-            deleteBtn.disabled = checkedCount === 0;
-            selectedCountSpan.textContent = checkedCount;
+            // Update UI elements
+            if (deleteBtn) {
+                deleteBtn.disabled = checkedCount === 0;
+            }
+            if (selectedCountSpan) {
+                selectedCountSpan.textContent = checkedCount;
+            }
+            if (totalItemsSpan) {
+                totalItemsSpan.textContent = checkboxes.length;
+            }
             
             // Calculate totals for selected items
             calculateSelectedTotals();
         }
+        
+        // Make updateSelection available globally
+        window.updateSelection = updateSelection;
         
         // Calculate totals for selected items
         function calculateSelectedTotals() {
@@ -894,6 +1065,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                     document.getElementById('selectedItemCount').textContent = totals.selected_count;
                     document.getElementById('subtotalAmount').textContent = totals.selected_subtotal_formatted;
                     document.getElementById('shippingAmount').textContent = totals.shipping_fee_formatted;
+                    document.getElementById('shippingAmount').className = totals.shipping_fee === 0 ? 'text-success' : '';
                     document.getElementById('taxAmount').textContent = totals.tax_formatted;
                     document.getElementById('totalAmount').textContent = totals.total_formatted;
                     
@@ -928,7 +1100,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
         }
         
         // Select all functionality
-        document.getElementById('selectAll').addEventListener('change', function() {
+        document.getElementById('selectAll')?.addEventListener('change', function() {
             const checkboxes = document.querySelectorAll('.item-checkbox');
             checkboxes.forEach(checkbox => {
                 checkbox.checked = this.checked;
@@ -999,7 +1171,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             }
             
             const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
-            cartItem.classList.add('removing');
+            cartItem.classList.add('animate-slideOut');
             
             fetch('cart.php', {
                 method: 'POST',
@@ -1011,22 +1183,24 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    cartItem.remove();
-                    selectedItems.delete(cartId.toString());
-                    updateSelection();
-                    showToast(data.message, 'success');
-                    
-                    // Check if cart is empty
-                    if (document.querySelectorAll('.cart-item').length === 0) {
-                        location.reload();
-                    }
+                    setTimeout(() => {
+                        cartItem.remove();
+                        selectedItems.delete(cartId.toString());
+                        updateSelection();
+                        showToast(data.message, 'success');
+                        
+                        // Check if cart is empty
+                        if (document.querySelectorAll('.cart-item').length === 0) {
+                            setTimeout(() => location.reload(), 1000);
+                        }
+                    }, 300);
                 } else {
-                    cartItem.classList.remove('removing');
+                    cartItem.classList.remove('animate-slideOut');
                     showToast(data.message, 'error');
                 }
             })
             .catch(error => {
-                cartItem.classList.remove('removing');
+                cartItem.classList.remove('animate-slideOut');
                 showToast('Có lỗi xảy ra khi xóa sản phẩm', 'error');
                 console.error('Error:', error);
             });
@@ -1057,20 +1231,25 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 hideLoading();
                 
                 if (data.success) {
-                    // Remove items from DOM
+                    // Remove items from DOM with animation
                     selectedItems.forEach(cartId => {
                         const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
-                        if (cartItem) cartItem.remove();
+                        if (cartItem) {
+                            cartItem.classList.add('animate-slideOut');
+                            setTimeout(() => cartItem.remove(), 300);
+                        }
                     });
                     
                     selectedItems.clear();
-                    updateSelection();
-                    showToast(data.message, 'success');
-                    
-                    // Check if cart is empty
-                    if (document.querySelectorAll('.cart-item').length === 0) {
-                        location.reload();
-                    }
+                    setTimeout(() => {
+                        updateSelection();
+                        showToast(data.message, 'success');
+                        
+                        // Check if cart is empty
+                        if (document.querySelectorAll('.cart-item').length === 0) {
+                            setTimeout(() => location.reload(), 1000);
+                        }
+                    }, 400);
                 } else {
                     showToast(data.message, 'error');
                 }
@@ -1122,6 +1301,8 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 return;
             }
             
+            showLoading();
+            
             // Store selected items in session for checkout
             fetch('cart.php', {
                 method: 'POST',
@@ -1132,6 +1313,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             })
             .then(response => response.json())
             .then(data => {
+                hideLoading();
                 if (data.success) {
                     window.location.href = 'checkout.php';
                 } else {
@@ -1139,6 +1321,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 }
             })
             .catch(error => {
+                hideLoading();
                 console.error('Error:', error);
                 // Fallback: redirect anyway
                 window.location.href = 'checkout.php';
@@ -1149,6 +1332,20 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
         function saveForLater() {
             showToast('Tính năng lưu để mua sau sẽ được cập nhật sớm!', 'success');
         }
+        
+        // Scroll to top functionality
+        window.addEventListener('scroll', function() {
+            const scrollBtn = document.getElementById('scrollToTop');
+            if (window.pageYOffset > 300) {
+                scrollBtn.style.display = 'block';
+            } else {
+                scrollBtn.style.display = 'none';
+            }
+        });
+        
+        document.getElementById('scrollToTop')?.addEventListener('click', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -1176,36 +1373,9 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             
             // Initialize selection
             updateSelection();
+            
+            console.log('TKT Shop Cart initialized successfully');
         });
     </script>
 </body>
-</html>    <?php endif; ?>
-                                    </div>
-                                    
-                                    <!-- Price -->
-                                    <div class="col-md-2 col-4 text-center">
-                                        <div class="fw-bold text-primary"><?= formatPrice($item['gia_ban']) ?></div>
-                                    </div>
-                                    
-                                    <!-- Quantity Controls -->
-                                    <div class="col-md-2 col-4">
-                                        <div class="quantity-controls input-group">
-                                            <button class="btn btn-outline-secondary quantity-btn" 
-                                                    type="button" 
-                                                    onclick="updateQuantity(<?= $item['id'] ?>, <?= $item['so_luong'] - 1 ?>)"
-                                                    <?= $item['so_luong'] <= 1 ? 'disabled' : '' ?>>
-                                                -
-                                            </button>
-                                            <input type="number" 
-                                                   class="form-control quantity-input" 
-                                                   value="<?= $item['so_luong'] ?>"
-                                                   min="1" 
-                                                   max="<?= $item['so_luong_ton_kho'] ?>"
-                                                   onchange="updateQuantity(<?= $item['id'] ?>, this.value)">
-                                            <button class="btn btn-outline-secondary quantity-btn" 
-                                                    type="button"
-                                                    onclick="updateQuantity(<?= $item['id'] ?>, <?= $item['so_luong'] + 1 ?>)"
-                                                    <?= $item['so_luong'] >= $item['so_luong_ton_kho'] ? 'disabled' : '' ?>>
-                                                +
-                                            </button>
-                                        </div>
+</html>
