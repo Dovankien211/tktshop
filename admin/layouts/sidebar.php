@@ -260,10 +260,6 @@ $admin_base = '/tktshop/admin';
                    class="submenu-link <?= isActiveMenu('/admin/products/create.php') ?>">
                     <i class="fas fa-plus me-2"></i>Thêm sản phẩm
                 </a>
-                <a href="<?= $admin_base ?>/products/variants.php" 
-                   class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
-                    <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
-                </a>
             </div>
         </div>
         
