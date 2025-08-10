@@ -10,6 +10,111 @@ session_start();
 require_once '../../config/config.php';
 require_once '../../config/database.php';
 
+// Auto-create categories table and sample data if not exists
+try {
+    // Tạo bảng categories nếu chưa có
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS categories (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255),
+            description TEXT,
+            parent_id INT DEFAULT 0,
+            sort_order INT DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    
+    // Kiểm tra và thêm dữ liệu mẫu nếu bảng trống
+    $count = $pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
+    if ($count == 0) {
+        $sample_categories = [
+            ['Giày thể thao', 'giay-the-thao', 'Giày dành cho hoạt động thể thao', 1],
+            ['Giày cao gót', 'giay-cao-got', 'Giày cao gót thời trang cho nữ', 2],
+            ['Giày da', 'giay-da', 'Giày da cao cấp, sang trọng', 3],
+            ['Giày lười', 'giay-luoi', 'Giày lười tiện lợi, thoải mái', 4],
+            ['Dép & Sandal', 'dep-sandal', 'Dép và sandal các loại', 5],
+            ['Giày boots', 'giay-boots', 'Giày boots phong cách', 6],
+            ['Nike', 'nike', 'Sản phẩm Nike chính hãng', 7],
+            ['Adidas', 'adidas', 'Sản phẩm Adidas chính hãng', 8],
+            ['Converse', 'converse', 'Sản phẩm Converse chính hãng', 9],
+            ['Vans', 'vans', 'Sản phẩm Vans chính hãng', 10],
+            ['Puma', 'puma', 'Sản phẩm Puma chính hãng', 11],
+            ['Reebok', 'reebok', 'Sản phẩm Reebok chính hãng', 12],
+            ['Giày nam', 'giay-nam', 'Giày dành cho nam giới', 13],
+            ['Giày nữ', 'giay-nu', 'Giày dành cho nữ giới', 14],
+            ['Giày trẻ em', 'giay-tre-em', 'Giày dành cho trẻ em', 15]
+        ];
+        
+        $stmt = $pdo->prepare("INSERT INTO categories (name, slug, description, sort_order, status) VALUES (?, ?, ?, ?, 'active')");
+        foreach ($sample_categories as $cat) {
+            $stmt->execute($cat);
+        }
+    }
+}
+
+// Tự động tạo bảng sizes và colors nếu chưa có
+try {
+    // Tạo bảng sizes
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS sizes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(50) NOT NULL,
+            sort_order INT DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    
+    $size_count = $pdo->query("SELECT COUNT(*) FROM sizes")->fetchColumn();
+    if ($size_count == 0) {
+        $sample_sizes = [
+            ['XS', 1], ['S', 2], ['M', 3], ['L', 4], ['XL', 5], ['XXL', 6],
+            ['35', 7], ['36', 8], ['37', 9], ['38', 10], ['39', 11], ['40', 12], 
+            ['41', 13], ['42', 14], ['43', 15], ['44', 16], ['45', 17]
+        ];
+        
+        $size_stmt = $pdo->prepare("INSERT INTO sizes (name, sort_order, status) VALUES (?, ?, 'active')");
+        foreach ($sample_sizes as $size) {
+            $size_stmt->execute($size);
+        }
+    }
+    
+    // Tạo bảng colors
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS colors (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(50) NOT NULL,
+            color_code VARCHAR(7) DEFAULT '#000000',
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    
+    $color_count = $pdo->query("SELECT COUNT(*) FROM colors")->fetchColumn();
+    if ($color_count == 0) {
+        $sample_colors = [
+            ['Đỏ', '#FF0000'], ['Xanh dương', '#0066FF'], ['Xanh lá', '#00CC00'],
+            ['Vàng', '#FFFF00'], ['Đen', '#000000'], ['Trắng', '#FFFFFF'],
+            ['Xám', '#808080'], ['Nâu', '#8B4513'], ['Hồng', '#FF69B4'],
+            ['Tím', '#800080'], ['Cam', '#FF8C00'], ['Xanh navy', '#000080'],
+            ['Be', '#F5F5DC'], ['Bạc', '#C0C0C0'], ['Vàng gold', '#FFD700']
+        ];
+        
+        $color_stmt = $pdo->prepare("INSERT INTO colors (name, color_code, status) VALUES (?, ?, 'active')");
+        foreach ($sample_colors as $color) {
+            $color_stmt->execute([$color[0], $color[1]]);
+        }
+    }
+} catch (Exception $e) {
+    error_log("Auto-create sizes/colors error: " . $e->getMessage());
+} catch (Exception $e) {
+    // Nếu có lỗi, ghi log nhưng không dừng chương trình
+    error_log("Auto-create categories error: " . $e->getMessage());
+}
+
 // Kiểm tra đăng nhập admin
 if (!isset($_SESSION['admin_id'])) {
     header('Location: ../login.php');
@@ -203,12 +308,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Lấy danh sách categories
+// Lấy danh sách categories với error handling tốt hơn
+$categories = [];
 try {
-    $categories = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name")->fetchAll();
+    // Thử tên bảng chuẩn trước
+    $stmt = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY sort_order, name");
+    $categories = $stmt->fetchAll();
+    
+    // Nếu bảng tồn tại nhưng không có dữ liệu
+    if (empty($categories)) {
+        // Tạo dữ liệu mẫu ngay lập tức
+        $sample_categories = [
+            ['Giày thể thao', 'giay-the-thao', 'Giày dành cho hoạt động thể thao'],
+            ['Giày cao gót', 'giay-cao-got', 'Giày cao gót thời trang cho nữ'], 
+            ['Giày da', 'giay-da', 'Giày da cao cấp, sang trọng'],
+            ['Giày lười', 'giay-luoi', 'Giày lười tiện lợi, thoải mái'],
+            ['Dép & Sandal', 'dep-sandal', 'Dép và sandal các loại'],
+            ['Nike', 'nike', 'Sản phẩm Nike chính hãng'],
+            ['Adidas', 'adidas', 'Sản phẩm Adidas chính hãng'],
+            ['Giày nam', 'giay-nam', 'Giày dành cho nam giới'],
+            ['Giày nữ', 'giay-nu', 'Giày dành cho nữ giới']
+        ];
+        
+        $insert_stmt = $pdo->prepare("INSERT INTO categories (name, slug, description, status) VALUES (?, ?, ?, 'active')");
+        foreach ($sample_categories as $cat) {
+            $insert_stmt->execute($cat);
+        }
+        
+        // Lấy lại dữ liệu sau khi insert
+        $categories = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name")->fetchAll();
+    }
+    
 } catch (PDOException $e) {
-    $categories = [];
-    $errors[] = "Không thể tải danh mục";
+    // Nếu bảng categories không tồn tại, thử tên bảng khác
+    try {
+        $stmt = $pdo->query("SELECT id, ten_danh_muc as name FROM danh_muc_giay WHERE trang_thai = 'hoat_dong' ORDER BY ten_danh_muc");
+        $categories = $stmt->fetchAll();
+    } catch (PDOException $e2) {
+        // Nếu không có bảng nào, tạo categories array trống và thông báo
+        $categories = [];
+        $errors[] = "Không tìm thấy danh mục. Vui lòng chạy file setup hoặc tạo danh mục trước.";
+        
+        // Hiển thị thông tin debug nếu cần
+        if (isset($_GET['debug'])) {
+            try {
+                $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+                $category_tables = array_filter($tables, function($table) {
+                    return strpos(strtolower($table), 'categ') !== false || 
+                           strpos(strtolower($table), 'danh_muc') !== false;
+                });
+                
+                if (!empty($category_tables)) {
+                    $errors[] = "Tìm thấy các bảng có thể liên quan: " . implode(', ', $category_tables);
+                } else {
+                    $errors[] = "Không tìm thấy bảng danh mục nào. Các bảng hiện có: " . implode(', ', array_slice($tables, 0, 10));
+                }
+            } catch (Exception $e3) {
+                $errors[] = "Không thể truy vấn database: " . $e3->getMessage();
+            }
+        }
+    }
 }
 ?>
 
