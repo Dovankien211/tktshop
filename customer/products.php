@@ -504,7 +504,7 @@ function displayStars($rating) {
                                         
                                         <!-- Actions -->
                                         <div class="mt-3 d-grid gap-2">
-                                            <a href="product_detail.php?id=<?= $product['id'] ?>" class="btn btn-primary btn-sm">
+                                            <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" class="btn btn-primary btn-sm">
                                                 <i class="fas fa-eye"></i> Xem chi tiết
                                             </a>
                                         </div>
