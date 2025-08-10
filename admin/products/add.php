@@ -289,10 +289,39 @@ try {
     $sizes = [];
 }
 
-include '../layouts/header.php';
+// Check if header file exists, if not create basic layout
+if (file_exists('../layouts/header.php')) {
+    include '../layouts/header.php';
+} else {
+    // Basic HTML structure if header doesn't exist
+    echo '<!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Add Product - TKT Admin</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    </head>
+    <body>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-2 bg-dark text-white p-3">
+                    <h4>TKT Admin</h4>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="../dashboard.php">Dashboard</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="index.php">Sản phẩm</a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="col-md-10">';
+}
 ?>
 
-<div class="content-area">
+<div class="content-area p-4">
     <div class="page-header">
         <h1 class="page-title">Add New Product</h1>
         <div class="page-actions">
@@ -321,7 +350,7 @@ include '../layouts/header.php';
     <form method="POST" enctype="multipart/form-data" class="product-form" data-ajax="false">
         <div class="row">
             <!-- Left Column -->
-            <div class="col-8">
+            <div class="col-md-8">
                 <!-- Basic Information -->
                 <div class="admin-card mb-30">
                     <div class="admin-card-header">
@@ -335,15 +364,15 @@ include '../layouts/header.php';
                                    data-validation="required" required>
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-6">
                                 <label class="form-label">SKU *</label>
                                 <input type="text" name="sku" class="form-control" 
                                        value="<?php echo htmlspecialchars($_POST['sku'] ?? ''); ?>" 
                                        data-validation="required" required>
                                 <small class="form-text text-muted">Unique product identifier</small>
                             </div>
-                            <div class="form-group">
+                            <div class="col-md-6">
                                 <label class="form-label">Brand</label>
                                 <input type="text" name="brand" class="form-control" 
                                        value="<?php echo htmlspecialchars($_POST['brand'] ?? ''); ?>">
@@ -371,27 +400,23 @@ include '../layouts/header.php';
                         <h3 class="admin-card-title">Pricing</h3>
                     </div>
                     <div class="admin-card-body">
-                        <div class="form-row">
-                            <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-6">
                                 <label class="form-label">Regular Price *</label>
                                 <div class="input-group">
                                     <input type="number" name="price" class="form-control" 
                                            value="<?php echo $_POST['price'] ?? ''; ?>" 
                                            step="0.01" min="0" data-validation="required numeric" required>
-                                    <div class="input-group-append">
-                                        <span class="input-group-text">VND</span>
-                                    </div>
+                                    <div class="input-group-text">VND</div>
                                 </div>
                             </div>
-                            <div class="form-group">
+                            <div class="col-md-6">
                                 <label class="form-label">Sale Price</label>
                                 <div class="input-group">
                                     <input type="number" name="sale_price" class="form-control" 
                                            value="<?php echo $_POST['sale_price'] ?? ''; ?>" 
                                            step="0.01" min="0">
-                                    <div class="input-group-append">
-                                        <span class="input-group-text">VND</span>
-                                    </div>
+                                    <div class="input-group-text">VND</div>
                                 </div>
                                 <small class="form-text text-muted">Leave empty if no sale</small>
                             </div>
@@ -405,14 +430,14 @@ include '../layouts/header.php';
                         <h3 class="admin-card-title">Inventory</h3>
                     </div>
                     <div class="admin-card-body">
-                        <div class="form-row">
-                            <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-6">
                                 <label class="form-label">Stock Quantity *</label>
                                 <input type="number" name="quantity" class="form-control" 
                                        value="<?php echo $_POST['quantity'] ?? '0'; ?>" 
                                        min="0" data-validation="required numeric" required>
                             </div>
-                            <div class="form-group">
+                            <div class="col-md-6">
                                 <label class="form-label">Minimum Quantity</label>
                                 <input type="number" name="min_quantity" class="form-control" 
                                        value="<?php echo $_POST['min_quantity'] ?? '1'; ?>" 
@@ -429,14 +454,14 @@ include '../layouts/header.php';
                         <h3 class="admin-card-title">Shipping Information</h3>
                     </div>
                     <div class="admin-card-body">
-                        <div class="form-row">
-                            <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-6">
                                 <label class="form-label">Weight (kg)</label>
                                 <input type="number" name="weight" class="form-control" 
                                        value="<?php echo $_POST['weight'] ?? ''; ?>" 
                                        step="0.01" min="0">
                             </div>
-                            <div class="form-group">
+                            <div class="col-md-6">
                                 <label class="form-label">Dimensions (L x W x H cm)</label>
                                 <input type="text" name="dimensions" class="form-control" 
                                        value="<?php echo htmlspecialchars($_POST['dimensions'] ?? ''); ?>"
@@ -479,7 +504,7 @@ include '../layouts/header.php';
             </div>
 
             <!-- Right Column -->
-            <div class="col-4">
+            <div class="col-md-4">
                 <!-- Product Images -->
                 <div class="admin-card mb-30">
                     <div class="admin-card-header">
@@ -565,10 +590,10 @@ include '../layouts/header.php';
                 <!-- Actions -->
                 <div class="admin-card">
                     <div class="admin-card-body">
-                        <button type="submit" class="btn btn-primary btn-block">
+                        <button type="submit" class="btn btn-primary w-100 mb-2">
                             <i class="fas fa-save"></i> Add Product
                         </button>
-                        <a href="index.php" class="btn btn-light btn-block mt-10">
+                        <a href="index.php" class="btn btn-outline-secondary w-100">
                             <i class="fas fa-times"></i> Cancel
                         </a>
                     </div>
@@ -577,6 +602,15 @@ include '../layouts/header.php';
         </div>
     </form>
 </div>
+
+<?php
+// Close the layout if using basic structure
+if (!file_exists('../layouts/header.php')) {
+    echo '</div></div></div>';
+}
+?>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <style>
 .image-upload-area {
@@ -651,17 +685,21 @@ include '../layouts/header.php';
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     margin-bottom: 20px;
+    border: 1px solid #e9ecef;
 }
 
 .admin-card-header {
     padding: 20px;
     border-bottom: 1px solid #eee;
+    background: #f8f9fa;
+    border-radius: 8px 8px 0 0;
 }
 
 .admin-card-title {
     margin: 0;
     font-size: 1.2rem;
     font-weight: 600;
+    color: #495057;
 }
 
 .admin-card-body {
@@ -672,14 +710,22 @@ include '../layouts/header.php';
     font-weight: 500;
     margin-bottom: 8px;
     display: block;
+    color: #495057;
 }
 
 .form-control {
     width: 100%;
     padding: 10px 15px;
-    border: 1px solid #ddd;
+    border: 1px solid #ced4da;
     border-radius: 6px;
     font-size: 14px;
+    transition: border-color 0.15s ease-in-out;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    outline: 0;
 }
 
 .btn {
@@ -690,40 +736,80 @@ include '../layouts/header.php';
     text-decoration: none;
     display: inline-block;
     text-align: center;
+    font-weight: 500;
+    transition: all 0.15s ease-in-out;
 }
 
 .btn-primary {
     background: #007bff;
     color: white;
+    border: 1px solid #007bff;
 }
 
-.btn-light {
-    background: #f8f9fa;
-    color: #333;
-    border: 1px solid #ddd;
+.btn-primary:hover {
+    background: #0056b3;
+    border-color: #0056b3;
 }
 
-.btn-block {
-    width: 100%;
-    margin-bottom: 10px;
+.btn-outline-secondary {
+    background: transparent;
+    color: #6c757d;
+    border: 1px solid #6c757d;
 }
+
+.btn-outline-secondary:hover {
+    background: #6c757d;
+    color: white;
+}
+
+.w-100 { width: 100% !important; }
+.mb-2 { margin-bottom: 0.5rem !important; }
 
 .alert {
     padding: 15px;
     border-radius: 6px;
     margin-bottom: 20px;
+    border: 1px solid transparent;
 }
 
 .alert-danger {
     background: #f8d7da;
     color: #721c24;
-    border: 1px solid #f5c6cb;
+    border-color: #f5c6cb;
 }
 
 .alert-success {
     background: #d4edda;
     color: #155724;
-    border: 1px solid #c3e6cb;
+    border-color: #c3e6cb;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.page-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+}
+
+.page-actions .btn {
+    margin-left: 10px;
+}
+
+.row { margin: 0 -15px; }
+.col-md-6, .col-md-8, .col-md-4 { padding: 0 15px; }
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
 }
 </style>
 
@@ -810,4 +896,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php include '../layouts/footer.php'; ?>
+<?php
+// Include footer if exists
+if (file_exists('../layouts/footer.php')) {
+    include '../layouts/footer.php';
+} else {
+    echo '</body></html>';
+}
+?>

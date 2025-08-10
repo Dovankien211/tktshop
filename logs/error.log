@@ -4,3 +4,5 @@
 2025-08-10 13:21:54 - Error [2]: include(): Failed opening '../layouts/footer.php' for inclusion (include_path='.;D:/Hocweb/laragon/etc/php/pear') in D:\Hocweb\laragon\www\tktshop\admin\products\add.php on line 813
 2025-08-10 13:22:07 - Error [2]: include(../layouts/footer.php): Failed to open stream: No such file or directory in D:\Hocweb\laragon\www\tktshop\admin\products\add.php on line 813
 2025-08-10 13:22:07 - Error [2]: include(): Failed opening '../layouts/footer.php' for inclusion (include_path='.;D:/Hocweb/laragon/etc/php/pear') in D:\Hocweb\laragon\www\tktshop\admin\products\add.php on line 813
+2025-08-10 13:22:33 - Error [2]: include(../layouts/footer.php): Failed to open stream: No such file or directory in D:\Hocweb\laragon\www\tktshop\admin\products\add.php on line 813
+2025-08-10 13:22:33 - Error [2]: include(): Failed opening '../layouts/footer.php' for inclusion (include_path='.;D:/Hocweb/laragon/etc/php/pear') in D:\Hocweb\laragon\www\tktshop\admin\products\add.php on line 813
