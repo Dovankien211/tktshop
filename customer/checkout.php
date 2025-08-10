@@ -1,200 +1,297 @@
 <?php
+// customer/checkout.php - UPDATED FOR CART CHECKBOX SYSTEM
 /**
- * customer/checkout.php - Simple Session-based Checkout
- * Thanh toán đơn giản dùng session cart
+ * Thanh toán - Tương thích hoàn toàn với VNPay có sẵn và COD + Cart Checkbox
+ * 🔧 FIXED: Đồng bộ với hệ thống checkbox cart + tính thuế chính xác
  */
 
-session_start();
 require_once '../config/database.php';
 require_once '../config/config.php';
 
-// Kiểm tra cart
-if (empty($_SESSION['cart'])) {
-    header('Location: cart.php');
-    exit;
+// Kiểm tra đăng nhập (có thể checkout với guest)
+$customer_id = $_SESSION['customer_id'] ?? null;
+$session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
+
+// 🔧 NEW: Lấy sản phẩm đã chọn từ session (từ cart checkbox)
+$checkout_item_ids = $_SESSION['checkout_items'] ?? [];
+
+$checkout_items = [];
+$subtotal = 0;
+$total_quantity = 0;
+
+if (($customer_id || $session_id) && !empty($checkout_item_ids)) {
+    // Lấy thông tin chi tiết các sản phẩm đã chọn
+    $placeholders = str_repeat('?,', count($checkout_item_ids) - 1) . '?';
+    $params = array_merge($checkout_item_ids, [$customer_id, $session_id]);
+    
+    $stmt = $pdo->prepare("
+        SELECT gh.*, sp.id as san_pham_id, sp.ten_san_pham, sp.hinh_anh_chinh, sp.slug, sp.thuong_hieu,
+               bsp.ma_sku, bsp.gia_ban as gia_hien_tai, bsp.so_luong_ton_kho,
+               kc.kich_co, ms.ten_mau, ms.ma_mau,
+               (gh.so_luong * gh.gia_tai_thoi_diem) as thanh_tien
+        FROM gio_hang gh
+        JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
+        JOIN san_pham_chinh sp ON bsp.san_pham_id = sp.id
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE gh.id IN ($placeholders) AND (gh.khach_hang_id = ? OR gh.session_id = ?) 
+        AND bsp.trang_thai = 'hoat_dong' 
+        AND sp.trang_thai = 'hoat_dong'
+        AND bsp.so_luong_ton_kho >= gh.so_luong
+        ORDER BY gh.ngay_them DESC
+    ");
+    $stmt->execute($params);
+    $checkout_items = $stmt->fetchAll();
+    
+    // Tính tổng cho các items đã chọn
+    foreach ($checkout_items as $item) {
+        $subtotal += $item['thanh_tien'];
+        $total_quantity += $item['so_luong'];
+    }
+} else {
+    // Fallback: Lấy tất cả sản phẩm trong giỏ hàng nếu không có selection
+    $stmt = $pdo->prepare("
+        SELECT gh.*, sp.id as san_pham_id, sp.ten_san_pham, sp.hinh_anh_chinh, sp.slug, sp.thuong_hieu,
+               bsp.ma_sku, bsp.gia_ban as gia_hien_tai, bsp.so_luong_ton_kho,
+               kc.kich_co, ms.ten_mau, ms.ma_mau,
+               (gh.so_luong * gh.gia_tai_thoi_diem) as thanh_tien
+        FROM gio_hang gh
+        JOIN bien_the_san_pham bsp ON gh.bien_the_id = bsp.id
+        JOIN san_pham_chinh sp ON bsp.san_pham_id = sp.id
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE (gh.khach_hang_id = ? OR gh.session_id = ?) 
+        AND bsp.trang_thai = 'hoat_dong' 
+        AND sp.trang_thai = 'hoat_dong'
+        AND bsp.so_luong_ton_kho >= gh.so_luong
+        ORDER BY gh.ngay_them DESC
+    ");
+    $stmt->execute([$customer_id, $session_id]);
+    $checkout_items = $stmt->fetchAll();
+    
+    // Tính tổng cho tất cả items
+    foreach ($checkout_items as $item) {
+        $subtotal += $item['thanh_tien'];
+        $total_quantity += $item['so_luong'];
+    }
+}
+
+// Redirect nếu giỏ hàng trống
+if (empty($checkout_items)) {
+    alert('Vui lòng chọn sản phẩm trong giỏ hàng để thanh toán!', 'warning');
+    redirect('/customer/cart.php');
+}
+
+// Lấy thông tin khách hàng nếu đã đăng nhập
+$customer_info = [];
+if ($customer_id) {
+    $stmt = $pdo->prepare("SELECT * FROM nguoi_dung WHERE id = ?");
+    $stmt->execute([$customer_id]);
+    $customer_info = $stmt->fetch() ?: [];
 }
 
 $errors = [];
 $form_data = [];
 
-// Tính tổng từ session cart
-$total_items = 0;
-$total_amount = 0;
-
-foreach ($_SESSION['cart'] as $item) {
-    $total_items += $item['quantity'];
-    $total_amount += $item['price'] * $item['quantity'];
-}
-
-$shipping_fee = $total_amount >= 500000 ? 0 : 30000;
-$tax = $total_amount * 0.1;
-$final_total = $total_amount + $shipping_fee + $tax;
-
 // Xử lý đặt hàng
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Lấy dữ liệu form
     $form_data = [
-        'full_name' => trim($_POST['full_name'] ?? ''),
-        'phone' => trim($_POST['phone'] ?? ''),
-        'email' => trim($_POST['email'] ?? ''),
-        'address' => trim($_POST['address'] ?? ''),
-        'notes' => trim($_POST['notes'] ?? ''),
-        'payment_method' => $_POST['payment_method'] ?? 'cod',
-        'shipping_method' => $_POST['shipping_method'] ?? 'standard'
+        'ho_ten_nhan' => trim($_POST['ho_ten_nhan'] ?? ''),
+        'so_dien_thoai_nhan' => trim($_POST['so_dien_thoai_nhan'] ?? ''),
+        'email_nhan' => trim($_POST['email_nhan'] ?? ''),
+        'dia_chi_nhan' => trim($_POST['dia_chi_nhan'] ?? ''),
+        'ghi_chu_khach_hang' => trim($_POST['ghi_chu_khach_hang'] ?? ''),
+        'phuong_thuc_thanh_toan' => $_POST['phuong_thuc_thanh_toan'] ?? 'cod',
+        'phuong_thuc_van_chuyen' => $_POST['phuong_thuc_van_chuyen'] ?? 'giao_hang_nhanh'
     ];
     
     // Validate
-    if (empty($form_data['full_name'])) {
-        $errors[] = 'Họ tên không được để trống';
+    if (empty($form_data['ho_ten_nhan'])) {
+        $errors[] = 'Họ tên người nhận không được để trống';
     }
     
-    if (empty($form_data['phone'])) {
+    if (empty($form_data['so_dien_thoai_nhan'])) {
         $errors[] = 'Số điện thoại không được để trống';
-    } elseif (!preg_match('/^[0-9]{10,11}$/', $form_data['phone'])) {
+    } elseif (!preg_match('/^[0-9]{10,11}$/', $form_data['so_dien_thoai_nhan'])) {
         $errors[] = 'Số điện thoại không hợp lệ';
     }
     
-    if (!empty($form_data['email']) && !filter_var($form_data['email'], FILTER_VALIDATE_EMAIL)) {
+    if (!empty($form_data['email_nhan']) && !filter_var($form_data['email_nhan'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Email không hợp lệ';
     }
     
-    if (empty($form_data['address'])) {
+    if (empty($form_data['dia_chi_nhan'])) {
         $errors[] = 'Địa chỉ giao hàng không được để trống';
     }
     
-    // Nếu không có lỗi, tạo đơn hàng
+    // 🔧 NEW: Tính phí vận chuyển và thuế chính xác
+    $phi_van_chuyen = 0;
+    if ($subtotal < 500000) { // Miễn phí vận chuyển cho đơn từ 500k
+        switch ($form_data['phuong_thuc_van_chuyen']) {
+            case 'giao_hang_nhanh':
+                $phi_van_chuyen = 30000;
+                break;
+            case 'giao_hang_tieu_chuan':
+                $phi_van_chuyen = 20000;
+                break;
+            case 'giao_hang_hoa_toc':
+                $phi_van_chuyen = 50000;
+                break;
+        }
+    }
+    
+    // 🔧 NEW: Thêm thuế 10% như trong cart
+    $thue = $subtotal * 0.1;
+    $total_amount = $subtotal + $phi_van_chuyen + $thue;
+    
+    // Tạo đơn hàng nếu không có lỗi
     if (empty($errors)) {
         try {
             $pdo->beginTransaction();
             
-            $order_code = 'DH' . date('YmdHis') . rand(100, 999);
+            // Tạo mã đơn hàng
+            $ma_don_hang = 'DH' . date('YmdHis') . rand(100, 999);
             
-            // Tạo bảng orders nếu chưa có
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS orders (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    order_code VARCHAR(50) UNIQUE NOT NULL,
-                    customer_name VARCHAR(255) NOT NULL,
-                    customer_phone VARCHAR(20) NOT NULL,
-                    customer_email VARCHAR(255),
-                    customer_address TEXT NOT NULL,
-                    notes TEXT,
-                    subtotal DECIMAL(10,2) NOT NULL,
-                    shipping_fee DECIMAL(10,2) NOT NULL,
-                    tax DECIMAL(10,2) NOT NULL,
-                    total DECIMAL(10,2) NOT NULL,
-                    payment_method VARCHAR(20) NOT NULL,
-                    shipping_method VARCHAR(20) NOT NULL,
-                    payment_status VARCHAR(20) DEFAULT 'pending',
-                    order_status VARCHAR(20) DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-            
-            // Insert đơn hàng
+            // 🔧 FIX: INSERT với thuế
             $stmt = $pdo->prepare("
-                INSERT INTO orders 
-                (order_code, customer_name, customer_phone, customer_email, customer_address, 
-                 notes, subtotal, shipping_fee, tax, total, payment_method, shipping_method, 
-                 payment_status, order_status) 
+                INSERT INTO don_hang 
+                (ma_don_hang, khach_hang_id, ho_ten_nhan, so_dien_thoai_nhan, email_nhan, 
+                 dia_chi_nhan, ghi_chu_khach_hang, tong_tien_hang, phi_van_chuyen, thue,
+                 tong_thanh_toan, phuong_thuc_thanh_toan, phuong_thuc_van_chuyen, trang_thai_thanh_toan) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
             $stmt->execute([
-                $order_code,
-                $form_data['full_name'],
-                $form_data['phone'],
-                $form_data['email'],
-                $form_data['address'],
-                $form_data['notes'],
+                $ma_don_hang, 
+                $customer_id, 
+                $form_data['ho_ten_nhan'], 
+                $form_data['so_dien_thoai_nhan'], 
+                $form_data['email_nhan'],
+                $form_data['dia_chi_nhan'], 
+                $form_data['ghi_chu_khach_hang'],
+                $subtotal, 
+                $phi_van_chuyen,
+                $thue, // 🔧 NEW: Thêm thuế
                 $total_amount,
-                $shipping_fee,
-                $tax,
-                $final_total,
-                $form_data['payment_method'],
-                $form_data['shipping_method'],
-                $form_data['payment_method'] == 'vnpay' ? 'pending' : 'unpaid',
-                'pending'
+                $form_data['phuong_thuc_thanh_toan'], 
+                $form_data['phuong_thuc_van_chuyen'],
+                ($form_data['phuong_thuc_thanh_toan'] == 'vnpay' ? 'cho_thanh_toan' : 'chua_thanh_toan')
             ]);
             
-            $order_id = $pdo->lastInsertId();
+            $don_hang_id = $pdo->lastInsertId();
             
-            // Tạo bảng order_items nếu chưa có
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS order_items (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    order_id INT NOT NULL,
-                    product_id INT NOT NULL,
-                    product_name VARCHAR(255) NOT NULL,
-                    product_image VARCHAR(255),
-                    price DECIMAL(10,2) NOT NULL,
-                    quantity INT NOT NULL,
-                    subtotal DECIMAL(10,2) NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            // Insert chi tiết đơn hàng (chỉ cho items đã chọn)
+            $stmt_ctdh = $pdo->prepare("
+                INSERT INTO chi_tiet_don_hang 
+                (don_hang_id, san_pham_id, bien_the_id, ten_san_pham, thuong_hieu, 
+                 kich_co, mau_sac, ma_sku, hinh_anh, so_luong, gia_ban, thanh_tien)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            // Insert chi tiết đơn hàng
-            $stmt_items = $pdo->prepare("
-                INSERT INTO order_items 
-                (order_id, product_id, product_name, product_image, price, quantity, subtotal)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ");
-            
-            foreach ($_SESSION['cart'] as $item) {
-                $stmt_items->execute([
-                    $order_id,
-                    $item['product_id'],
-                    $item['name'],
-                    $item['image'],
-                    $item['price'],
-                    $item['quantity'],
-                    $item['price'] * $item['quantity']
+            foreach ($checkout_items as $item) {
+                $stmt_ctdh->execute([
+                    $don_hang_id, 
+                    $item['san_pham_id'], 
+                    $item['bien_the_id'],
+                    $item['ten_san_pham'], 
+                    $item['thuong_hieu'],
+                    $item['kich_co'], 
+                    $item['ten_mau'], 
+                    $item['ma_sku'],
+                    $item['hinh_anh_chinh'], 
+                    $item['so_luong'], 
+                    $item['gia_tai_thoi_diem'], 
+                    $item['thanh_tien']
                 ]);
             }
             
             $pdo->commit();
             
             // Xử lý theo phương thức thanh toán
-            if ($form_data['payment_method'] == 'vnpay') {
-                // Lưu thông tin để chuyển đến VNPay
+            if ($form_data['phuong_thuc_thanh_toan'] == 'vnpay') {
+                // 🔧 VNPAY: Lưu thông tin vào session để chuyển đến VNPay
                 $_SESSION['vnpay_order'] = [
-                    'order_id' => $order_id,
-                    'order_code' => $order_code,
-                    'amount' => $final_total,
-                    'order_info' => "Thanh toan don hang #" . $order_code,
-                    'customer_name' => $form_data['full_name'],
-                    'customer_email' => $form_data['email'],
-                    'customer_phone' => $form_data['phone']
+                    'order_id' => $don_hang_id,
+                    'amount' => $total_amount,
+                    'order_info' => "Thanh toan don hang #" . $ma_don_hang,
+                    'customer_name' => $form_data['ho_ten_nhan'],
+                    'customer_email' => $form_data['email_nhan'],
+                    'customer_phone' => $form_data['so_dien_thoai_nhan']
                 ];
                 
-                // Xóa cart và chuyển đến VNPay
-                $_SESSION['cart'] = [];
-                header('Location: ../vnpay/create_payment.php');
-                exit;
+                // Redirect đến VNPay create_payment.php
+                redirect('/vnpay/create_payment.php');
                 
             } else {
-                // COD: Cập nhật trạng thái và xóa cart
-                $pdo->prepare("UPDATE orders SET order_status = 'confirmed' WHERE id = ?")
-                    ->execute([$order_id]);
+                // 🔧 COD: Xử lý đơn hàng COD
+                $pdo->beginTransaction();
                 
-                $_SESSION['cart'] = [];
-                $_SESSION['last_order'] = $order_code;
+                // Trừ tồn kho cho items đã chọn
+                foreach ($checkout_items as $item) {
+                    $pdo->prepare("
+                        UPDATE bien_the_san_pham 
+                        SET so_luong_ton_kho = so_luong_ton_kho - ?,
+                            so_luong_da_ban = so_luong_da_ban + ?
+                        WHERE id = ?
+                    ")->execute([$item['so_luong'], $item['so_luong'], $item['bien_the_id']]);
+                }
                 
-                header('Location: order_success.php?order=' . $order_code);
-                exit;
+                // 🔧 NEW: Xóa chỉ items đã chọn khỏi giỏ hàng
+                if (!empty($checkout_item_ids)) {
+                    $placeholders = str_repeat('?,', count($checkout_item_ids) - 1) . '?';
+                    $params = array_merge($checkout_item_ids, [$customer_id, $session_id]);
+                    
+                    $pdo->prepare("
+                        DELETE FROM gio_hang 
+                        WHERE id IN ($placeholders) AND (khach_hang_id = ? OR session_id = ?)
+                    ")->execute($params);
+                } else {
+                    // Fallback: Xóa tất cả
+                    $pdo->prepare("
+                        DELETE FROM gio_hang 
+                        WHERE khach_hang_id = ? OR session_id = ?
+                    ")->execute([$customer_id, $session_id]);
+                }
+                
+                // Cập nhật trạng thái đơn hàng COD
+                $pdo->prepare("
+                    UPDATE don_hang SET 
+                        trang_thai_don_hang = 'cho_xac_nhan',
+                        ngay_cap_nhat = NOW()
+                    WHERE id = ?
+                ")->execute([$don_hang_id]);
+                
+                $pdo->commit();
+                
+                // 🔧 NEW: Xóa checkout items khỏi session
+                unset($_SESSION['checkout_items']);
+                
+                // Thông báo thành công và chuyển đến trang success
+                alert('Đặt hàng thành công! Mã đơn hàng: ' . $ma_don_hang, 'success');
+                redirect('/customer/order_success.php?order=' . $ma_don_hang);
             }
             
         } catch (Exception $e) {
             $pdo->rollback();
             $errors[] = 'Có lỗi xảy ra khi tạo đơn hàng: ' . $e->getMessage();
+            error_log('Checkout Error: ' . $e->getMessage());
         }
     }
 }
 
-function formatPrice($price) {
-    return number_format($price, 0, ',', '.') . '₫';
+// Hiển thị lỗi payment nếu có
+if (isset($_GET['error']) && $_GET['error'] === 'vnpay') {
+    if (isset($_SESSION['payment_error'])) {
+        $errors[] = $_SESSION['payment_error'];
+        unset($_SESSION['payment_error']);
+    }
 }
+
+// 🔧 NEW: Tính phí vận chuyển và thuế mặc định
+$phi_van_chuyen = $subtotal >= 500000 ? 0 : 30000;
+$thue = $subtotal * 0.1; // Thuế 10%
+$total_amount = $subtotal + $phi_van_chuyen + $thue;
 ?>
 
 <!DOCTYPE html>
@@ -202,7 +299,7 @@ function formatPrice($price) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thanh toán - TKT Shop</title>
+    <title>Thanh toán - <?= SITE_NAME ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -229,6 +326,7 @@ function formatPrice($price) {
             padding-bottom: 10px;
         }
         
+        .shipping-option,
         .payment-option {
             border: 2px solid #dee2e6;
             border-radius: 8px;
@@ -238,6 +336,8 @@ function formatPrice($price) {
             transition: all 0.3s;
         }
         
+        .shipping-option:hover,
+        .shipping-option.selected,
         .payment-option:hover,
         .payment-option.selected {
             border-color: #007bff;
@@ -253,10 +353,87 @@ function formatPrice($price) {
         }
         
         .product-image {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             object-fit: cover;
             border-radius: 8px;
+        }
+        
+        .product-item {
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+        }
+        
+        .product-item:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .summary-row.total {
+            border-top: 2px solid #dee2e6;
+            padding-top: 15px;
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .payment-methods {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .payment-method {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .payment-method:hover,
+        .payment-method.selected {
+            border-color: #007bff;
+            background: #f8f9ff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+        }
+        
+        .payment-method input[type="radio"] {
+            margin-right: 15px;
+            transform: scale(1.2);
+        }
+        
+        .payment-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+            vertical-align: middle;
+        }
+        
+        .vnpay-icon {
+            background: linear-gradient(45deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .cod-icon {
+            color: #28a745;
+        }
+        
+        .selected-items-info {
+            background: #e7f3ff;
+            border: 1px solid #b6d7ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -283,6 +460,19 @@ function formatPrice($price) {
             </div>
         <?php endif; ?>
         
+        <!-- 🔧 NEW: Selected Items Info -->
+        <?php if (!empty($checkout_item_ids)): ?>
+            <div class="selected-items-info">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    <div>
+                        <strong>Thanh toán <?= count($checkout_items) ?> sản phẩm đã chọn</strong>
+                        <div class="text-muted small">Các sản phẩm khác trong giỏ hàng sẽ được giữ lại</div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+        
         <form method="POST" id="checkoutForm">
             <div class="row">
                 <!-- Left Column -->
@@ -297,37 +487,49 @@ function formatPrice($price) {
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Họ và tên <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" name="full_name" 
-                                           value="<?= htmlspecialchars($form_data['full_name'] ?? '') ?>" required>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           name="ho_ten_nhan" 
+                                           value="<?= htmlspecialchars($form_data['ho_ten_nhan'] ?? $customer_info['ho_ten'] ?? '') ?>"
+                                           required>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
-                                    <input type="tel" class="form-control" name="phone" 
-                                           value="<?= htmlspecialchars($form_data['phone'] ?? '') ?>" required>
+                                    <input type="tel" 
+                                           class="form-control" 
+                                           name="so_dien_thoai_nhan" 
+                                           value="<?= htmlspecialchars($form_data['so_dien_thoai_nhan'] ?? $customer_info['so_dien_thoai'] ?? '') ?>"
+                                           required>
                                 </div>
                             </div>
                         </div>
                         
                         <div class="mb-3">
                             <label class="form-label">Email</label>
-                            <input type="email" class="form-control" name="email" 
-                                   value="<?= htmlspecialchars($form_data['email'] ?? '') ?>">
+                            <input type="email" 
+                                   class="form-control" 
+                                   name="email_nhan" 
+                                   value="<?= htmlspecialchars($form_data['email_nhan'] ?? $customer_info['email'] ?? '') ?>">
                             <div class="form-text">Email để nhận thông báo đơn hàng</div>
                         </div>
                         
                         <div class="mb-3">
                             <label class="form-label">Địa chỉ giao hàng <span class="text-danger">*</span></label>
-                            <textarea class="form-control" name="address" rows="3" 
-                                      placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố" 
-                                      required><?= htmlspecialchars($form_data['address'] ?? '') ?></textarea>
+                            <textarea class="form-control" 
+                                      name="dia_chi_nhan" 
+                                      rows="3" 
+                                      placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố"
+                                      required><?= htmlspecialchars($form_data['dia_chi_nhan'] ?? $customer_info['dia_chi'] ?? '') ?></textarea>
                         </div>
                         
                         <div class="mb-3">
                             <label class="form-label">Ghi chú đơn hàng</label>
-                            <textarea class="form-control" name="notes" rows="2" 
-                                      placeholder="Ghi chú thêm cho đơn hàng (tuỳ chọn)"><?= htmlspecialchars($form_data['notes'] ?? '') ?></textarea>
+                            <textarea class="form-control" 
+                                      name="ghi_chu_khach_hang" 
+                                      rows="2" 
+                                      placeholder="Ghi chú thêm cho đơn hàng (tuỳ chọn)"><?= htmlspecialchars($form_data['ghi_chu_khach_hang'] ?? '') ?></textarea>
                         </div>
                     </div>
                     
@@ -337,18 +539,45 @@ function formatPrice($price) {
                             <i class="fas fa-shipping-fast me-2"></i>Phương thức vận chuyển
                         </div>
                         
-                        <div class="payment-option selected">
+                        <div class="shipping-option selected" onclick="selectShipping('giao_hang_nhanh', 30000)">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <input type="radio" name="shipping_method" value="standard" checked>
-                                    <strong class="ms-2">Giao hàng tiêu chuẩn</strong>
-                                    <div class="text-muted small mt-1">Giao trong 2-3 ngày</div>
+                                    <input type="radio" name="phuong_thuc_van_chuyen" value="giao_hang_nhanh" checked>
+                                    <strong class="ms-2">Giao hàng nhanh</strong>
+                                    <div class="text-muted small mt-1">Giao trong 1-2 ngày</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="fw-bold">
-                                        <?= $total_amount >= 500000 ? 'Miễn phí' : formatPrice($shipping_fee) ?>
+                                    <div class="fw-bold" id="shipping-cost-nhanh">
+                                        <?= $subtotal >= 500000 ? '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
                                     </div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="shipping-option" onclick="selectShipping('giao_hang_tieu_chuan', 20000)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <input type="radio" name="phuong_thuc_van_chuyen" value="giao_hang_tieu_chuan">
+                                    <strong class="ms-2">Giao hàng tiêu chuẩn</strong>
+                                    <div class="text-muted small mt-1">Giao trong 3-5 ngày</div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold"><?= $subtotal >= 500000 ? 'Miễn phí' : '20.000đ' ?></div>
+                                    <div class="text-success small">Miễn phí từ 500k</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="shipping-option" onclick="selectShipping('giao_hang_hoa_toc', 50000)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <input type="radio" name="phuong_thuc_van_chuyen" value="giao_hang_hoa_toc">
+                                    <strong class="ms-2">Giao hàng hoả tốc</strong>
+                                    <div class="text-muted small mt-1">Giao trong ngày (nội thành)</div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold">50.000đ</div>
                                 </div>
                             </div>
                         </div>
@@ -360,34 +589,57 @@ function formatPrice($price) {
                             <i class="fas fa-credit-card me-2"></i>Phương thức thanh toán
                         </div>
                         
-                        <!-- VNPay Payment -->
-                        <div class="payment-option selected" onclick="selectPayment('vnpay')">
-                            <div class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="vnpay" checked>
-                                <div class="ms-3">
-                                    <div class="fw-bold text-primary">Thanh toán VNPay</div>
-                                    <div class="text-muted small">
-                                        Thanh toán qua ví điện tử, ngân hàng, QR Code
+                        <div class="payment-methods">
+                            <!-- VNPay Payment -->
+                            <div class="payment-method selected" onclick="selectPayment('vnpay')">
+                                <div class="d-flex align-items-center">
+                                    <input type="radio" name="phuong_thuc_thanh_toan" value="vnpay" checked>
+                                    <div class="payment-icon">
+                                        <span class="vnpay-icon">VNPay</span>
                                     </div>
-                                    <div class="mt-1">
-                                        <span class="badge bg-success me-1">An toàn</span>
-                                        <span class="badge bg-info">Nhanh chóng</span>
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold text-primary">Thanh toán VNPay</div>
+                                        <div class="text-muted small">
+                                            Thanh toán qua ví điện tử, ngân hàng, QR Code
+                                        </div>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success me-1">An toàn</span>
+                                            <span class="badge bg-info me-1">Nhanh chóng</span>
+                                            <span class="badge bg-warning">Ưu đãi</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- COD Payment -->
+                            <div class="payment-method" onclick="selectPayment('cod')">
+                                <div class="d-flex align-items-center">
+                                    <input type="radio" name="phuong_thuc_thanh_toan" value="cod">
+                                    <div class="payment-icon">
+                                        <i class="fas fa-money-bill-wave cod-icon"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold text-success">Thanh toán khi nhận hàng (COD)</div>
+                                        <div class="text-muted small">
+                                            Thanh toán tiền mặt khi shipper giao hàng
+                                        </div>
+                                        <div class="mt-2">
+                                            <span class="badge bg-secondary me-1">Tiền mặt</span>
+                                            <span class="badge bg-primary">Kiểm tra hàng trước</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- COD Payment -->
-                        <div class="payment-option" onclick="selectPayment('cod')">
+                        <!-- Payment Security Info -->
+                        <div class="mt-3 p-3 bg-light rounded">
                             <div class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="cod">
-                                <div class="ms-3">
-                                    <div class="fw-bold text-success">Thanh toán khi nhận hàng (COD)</div>
-                                    <div class="text-muted small">
-                                        Thanh toán tiền mặt khi shipper giao hàng
-                                    </div>
-                                    <div class="mt-1">
-                                        <span class="badge bg-secondary">Tiền mặt</span>
+                                <i class="fas fa-shield-alt text-success me-2"></i>
+                                <div>
+                                    <strong class="text-success">Giao dịch được bảo mật</strong>
+                                    <div class="small text-muted">
+                                        Thông tin thanh toán của bạn được mã hóa SSL 256-bit
                                     </div>
                                 </div>
                             </div>
@@ -404,19 +656,24 @@ function formatPrice($price) {
                         
                         <!-- Products -->
                         <div class="mb-4">
-                            <?php foreach ($_SESSION['cart'] as $item): ?>
-                                <div class="d-flex mb-3 pb-3 border-bottom">
-                                    <div class="me-3">
-                                        <img src="/tktshop/uploads/products/<?= $item['image'] ?>" 
-                                             class="product-image" 
-                                             alt="<?= htmlspecialchars($item['name']) ?>"
-                                             onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1"><?= htmlspecialchars($item['name']) ?></h6>
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">x<?= $item['quantity'] ?></span>
-                                            <span class="fw-bold"><?= formatPrice($item['price'] * $item['quantity']) ?></span>
+                            <?php foreach ($checkout_items as $item): ?>
+                                <div class="product-item">
+                                    <div class="d-flex">
+                                        <div class="me-3">
+                                            <img src="/tktshop/uploads/products/<?= $item['hinh_anh_chinh'] ?: 'default-product.jpg' ?>" 
+                                                 class="product-image" 
+                                                 alt="<?= htmlspecialchars($item['ten_san_pham']) ?>"
+                                                 onerror="this.src='/tktshop/assets/images/no-image.jpg'">
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1"><?= htmlspecialchars($item['ten_san_pham']) ?></h6>
+                                            <div class="text-muted small mb-1">
+                                                Size <?= $item['kich_co'] ?> - <?= htmlspecialchars($item['ten_mau']) ?>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span class="text-muted">x<?= $item['so_luong'] ?></span>
+                                                <span class="fw-bold"><?= formatPrice($item['thanh_tien']) ?></span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -424,32 +681,31 @@ function formatPrice($price) {
                         </div>
                         
                         <!-- Summary -->
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Tạm tính (<?= $total_items ?> sản phẩm):</span>
-                            <span><?= formatPrice($total_amount) ?></span>
+                        <div class="summary-row">
+                            <span>Tạm tính (<?= $total_quantity ?> sản phẩm):</span>
+                            <span id="subtotalAmount"><?= formatPrice($subtotal) ?></span>
                         </div>
                         
-                        <div class="d-flex justify-content-between mb-2">
+                        <div class="summary-row">
                             <span>Phí vận chuyển:</span>
-                            <span><?= $shipping_fee == 0 ? 'Miễn phí' : formatPrice($shipping_fee) ?></span>
+                            <span id="shippingAmount"><?= $phi_van_chuyen == 0 ? 'Miễn phí' : formatPrice($phi_van_chuyen) ?></span>
                         </div>
                         
-                        <div class="d-flex justify-content-between mb-2">
+                        <!-- 🔧 NEW: Hiển thị thuế -->
+                        <div class="summary-row">
                             <span>Thuế (10%):</span>
-                            <span><?= formatPrice($tax) ?></span>
+                            <span id="taxAmount"><?= formatPrice($thue) ?></span>
                         </div>
                         
-                        <?php if ($total_amount >= 500000): ?>
-                            <div class="text-success small mb-2">
-                                <i class="fas fa-check me-1"></i>Miễn phí vận chuyển
+                        <?php if ($subtotal >= 500000): ?>
+                            <div class="summary-row text-success">
+                                <small><i class="fas fa-check me-1"></i>Miễn phí vận chuyển</small>
                             </div>
                         <?php endif; ?>
                         
-                        <hr>
-                        
-                        <div class="d-flex justify-content-between mb-3">
-                            <strong>Tổng cộng:</strong>
-                            <strong class="text-primary fs-5"><?= formatPrice($final_total) ?></strong>
+                        <div class="summary-row total">
+                            <span>Tổng cộng:</span>
+                            <span class="text-primary" id="totalAmount"><?= formatPrice($total_amount) ?></span>
                         </div>
                         
                         <!-- Checkout Button -->
@@ -461,7 +717,7 @@ function formatPrice($price) {
                         </div>
                         
                         <div class="text-center mt-3">
-                            <a href="cart.php" class="text-muted text-decoration-none">
+                            <a href="/customer/cart.php" class="text-muted text-decoration-none">
                                 <i class="fas fa-arrow-left me-1"></i>Quay lại giỏ hàng
                             </a>
                         </div>
@@ -492,33 +748,74 @@ function formatPrice($price) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Select payment method
-        function selectPayment(method) {
+        const subtotal = <?= $subtotal ?>;
+        const taxRate = 0.1; // 10% thuế
+        let currentShippingFee = <?= $phi_van_chuyen ?>;
+        
+        // Select shipping method
+        function selectShipping(method, fee) {
             // Update UI
-            document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
+            document.querySelectorAll('.shipping-option').forEach(el => el.classList.remove('selected'));
             event.currentTarget.classList.add('selected');
             
             // Update radio
-            document.querySelector(`input[name="payment_method"][value="${method}"]`).checked = true;
+            document.querySelector(`input[value="${method}"]`).checked = true;
+            
+            // Calculate shipping fee (free if order >= 500k, except hoa_toc)
+            let finalFee = fee;
+            if (subtotal >= 500000 && method !== 'giao_hang_hoa_toc') {
+                finalFee = 0;
+            }
+            currentShippingFee = finalFee;
+            
+            // Calculate tax and total
+            const tax = subtotal * taxRate;
+            const total = subtotal + finalFee + tax;
+            
+            // Update display
+            document.getElementById('shippingAmount').textContent = 
+                finalFee === 0 ? 'Miễn phí' : formatPrice(finalFee);
+            document.getElementById('taxAmount').textContent = formatPrice(tax);
+            document.getElementById('totalAmount').textContent = formatPrice(total);
+        }
+        
+        // Select payment method
+        function selectPayment(method) {
+            // Update UI
+            document.querySelectorAll('.payment-method').forEach(el => el.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            
+            // Update radio
+            document.querySelector(`input[name="phuong_thuc_thanh_toan"][value="${method}"]`).checked = true;
             
             // Update submit button text
-            const submitText = document.getElementById('submitText');
+            const submitBtn = document.getElementById('submitText');
             const submitIcon = document.querySelector('#submitBtn i');
             
             if (method === 'vnpay') {
-                submitText.textContent = 'Thanh toán VNPay';
+                submitBtn.textContent = 'Thanh toán VNPay';
                 submitIcon.className = 'fas fa-credit-card me-2';
             } else {
-                submitText.textContent = 'Đặt hàng COD';
+                submitBtn.textContent = 'Đặt hàng COD';
                 submitIcon.className = 'fas fa-shopping-bag me-2';
             }
         }
         
-        // Form validation
+        // Format price
+        function formatPrice(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+        
+        // Form validation and submission
         document.getElementById('checkoutForm').addEventListener('submit', function(e) {
-            const requiredFields = ['full_name', 'phone', 'address'];
+            const requiredFields = ['ho_ten_nhan', 'so_dien_thoai_nhan', 'dia_chi_nhan'];
             let isValid = true;
             
+            // Validate required fields
             requiredFields.forEach(fieldName => {
                 const field = document.querySelector(`[name="${fieldName}"]`);
                 if (!field.value.trim()) {
@@ -529,17 +826,17 @@ function formatPrice($price) {
                 }
             });
             
-            // Validate phone
-            const phone = document.querySelector('[name="phone"]').value;
+            // Validate phone number
+            const phone = document.querySelector('[name="so_dien_thoai_nhan"]').value;
             if (phone && !/^[0-9]{10,11}$/.test(phone)) {
-                document.querySelector('[name="phone"]').classList.add('is-invalid');
+                document.querySelector('[name="so_dien_thoai_nhan"]').classList.add('is-invalid');
                 isValid = false;
             }
             
             // Validate email if provided
-            const email = document.querySelector('[name="email"]').value;
+            const email = document.querySelector('[name="email_nhan"]').value;
             if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                document.querySelector('[name="email"]').classList.add('is-invalid');
+                document.querySelector('[name="email_nhan"]').classList.add('is-invalid');
                 isValid = false;
             }
             
@@ -549,43 +846,52 @@ function formatPrice($price) {
                 return false;
             }
             
-            // Show loading
+            // Show loading state
             const submitBtn = document.getElementById('submitBtn');
             const originalText = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang xử lý...';
             submitBtn.disabled = true;
             
-            // Re-enable after timeout
+            // Re-enable button after 15 seconds (in case of errors)
             setTimeout(() => {
                 submitBtn.innerHTML = originalText;
                 submitBtn.disabled = false;
-            }, 10000);
+            }, 15000);
         });
         
-        // Phone number formatting
-        document.querySelector('[name="phone"]').addEventListener('input', function() {
-            this.value = this.value.replace(/[^0-9]/g, '');
-        });
-        
-        // Real-time validation
-        const inputs = document.querySelectorAll('input[required], textarea[required]');
-        inputs.forEach(input => {
-            input.addEventListener('blur', function() {
-                if (!this.value.trim()) {
-                    this.classList.add('is-invalid');
-                } else {
-                    this.classList.remove('is-invalid');
-                }
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Phone number formatting
+            const phoneInput = document.querySelector('[name="so_dien_thoai_nhan"]');
+            if (phoneInput) {
+                phoneInput.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                });
+            }
+            
+            // Real-time validation
+            const inputs = document.querySelectorAll('input[required], textarea[required]');
+            inputs.forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (!this.value.trim()) {
+                        this.classList.add('is-invalid');
+                    } else {
+                        this.classList.remove('is-invalid');
+                    }
+                });
+                
+                input.addEventListener('input', function() {
+                    if (this.classList.contains('is-invalid') && this.value.trim()) {
+                        this.classList.remove('is-invalid');
+                    }
+                });
             });
             
-            input.addEventListener('input', function() {
-                if (this.classList.contains('is-invalid') && this.value.trim()) {
-                    this.classList.remove('is-invalid');
-                }
-            });
+            // Display initial totals correctly
+            console.log('Checkout initialized - Subtotal:', subtotal, 'Shipping:', currentShippingFee, 'Tax:', subtotal * taxRate, 'Total:', subtotal + currentShippingFee + (subtotal * taxRate));
         });
         
-        // Show toast
+        // Toast notification
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
@@ -603,6 +909,16 @@ function formatPrice($price) {
                 }
             }, 5000);
         }
+        
+        // Prevent double submission
+        let isSubmitting = false;
+        document.getElementById('checkoutForm').addEventListener('submit', function(e) {
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+            isSubmitting = true;
+        });
     </script>
 </body>
 </html>
