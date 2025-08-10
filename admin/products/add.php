@@ -137,6 +137,29 @@ try {
             INDEX idx_sku (sku)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    
+    // Tạo bảng product_variants nếu chưa có
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS product_variants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id INT NOT NULL,
+            size_id INT DEFAULT NULL,
+            color_id INT DEFAULT NULL,
+            sku VARCHAR(100),
+            price_adjustment DECIMAL(10,2) DEFAULT 0,
+            stock_quantity INT DEFAULT 0,
+            sold_quantity INT DEFAULT 0,
+            variant_image VARCHAR(255),
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_product_id (product_id),
+            INDEX idx_size_id (size_id),
+            INDEX idx_color_id (color_id),
+            INDEX idx_status (status),
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 } catch (Exception $e) {
     // Nếu có lỗi, ghi log nhưng không dừng chương trình
     error_log("Auto-create database tables error: " . $e->getMessage());

@@ -10,6 +10,32 @@ session_start();
 require_once '../../config/database.php';
 require_once '../../config/config.php';
 
+// Auto-create product_variants table if not exists
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS product_variants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id INT NOT NULL,
+            size_id INT DEFAULT NULL,
+            color_id INT DEFAULT NULL,
+            sku VARCHAR(100),
+            price_adjustment DECIMAL(10,2) DEFAULT 0,
+            stock_quantity INT DEFAULT 0,
+            sold_quantity INT DEFAULT 0,
+            variant_image VARCHAR(255),
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_product_id (product_id),
+            INDEX idx_size_id (size_id),
+            INDEX idx_color_id (color_id),
+            INDEX idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+} catch (Exception $e) {
+    error_log("Auto-create product_variants table error: " . $e->getMessage());
+}
+
 // Kiểm tra quyền admin
 if (!isset($_SESSION['admin_id'])) {
     header('Location: ../login.php');
