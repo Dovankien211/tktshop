@@ -22,13 +22,13 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $limit = 12;
 $offset = ($page - 1) * $limit;
 
-// Xây dựng câu truy vấn với tên bảng đúng
-$where_conditions = ["p.status = 'active'"];
+// 🔧 SỬA: Dùng bảng san_pham_chinh để khớp với product_detail.php
+$where_conditions = ["sp.trang_thai = 'hoat_dong'"];
 $params = [];
 
 // Tìm kiếm
 if (!empty($search)) {
-    $where_conditions[] = "(p.name LIKE ? OR p.description LIKE ? OR p.brand LIKE ?)";
+    $where_conditions[] = "(sp.ten_san_pham LIKE ? OR sp.mo_ta_ngan LIKE ? OR sp.thuong_hieu LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
@@ -36,79 +36,90 @@ if (!empty($search)) {
 
 // Lọc theo danh mục
 if ($category > 0) {
-    $where_conditions[] = "p.category_id = ?";
+    $where_conditions[] = "sp.danh_muc_id = ?";
     $params[] = $category;
 }
 
 // Lọc theo thương hiệu
 if (!empty($brand)) {
-    $where_conditions[] = "p.brand = ?";
+    $where_conditions[] = "sp.thuong_hieu = ?";
     $params[] = $brand;
 }
 
 // Lọc theo giá
 if ($min_price > 0) {
-    $where_conditions[] = "COALESCE(p.sale_price, p.price) >= ?";
+    $where_conditions[] = "COALESCE(sp.gia_khuyen_mai, sp.gia_goc) >= ?";
     $params[] = $min_price;
 }
 if ($max_price > 0) {
-    $where_conditions[] = "COALESCE(p.sale_price, p.price) <= ?";
+    $where_conditions[] = "COALESCE(sp.gia_khuyen_mai, sp.gia_goc) <= ?";
     $params[] = $max_price;
 }
 
 // Lọc sản phẩm đặc biệt
 if ($featured) {
-    $where_conditions[] = "p.is_featured = 1";
+    $where_conditions[] = "sp.san_pham_noi_bat = 1";
 }
 if ($sale) {
-    $where_conditions[] = "p.sale_price IS NOT NULL AND p.sale_price < p.price";
+    $where_conditions[] = "sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc";
 }
 
 // Sắp xếp
-$order_clause = "p.created_at DESC";
+$order_clause = "sp.ngay_tao DESC";
 switch ($sort) {
     case 'price_asc':
-        $order_clause = "COALESCE(p.sale_price, p.price) ASC";
+        $order_clause = "COALESCE(sp.gia_khuyen_mai, sp.gia_goc) ASC";
         break;
     case 'price_desc':
-        $order_clause = "COALESCE(p.sale_price, p.price) DESC";
+        $order_clause = "COALESCE(sp.gia_khuyen_mai, sp.gia_goc) DESC";
         break;
     case 'name_asc':
-        $order_clause = "p.name ASC";
+        $order_clause = "sp.ten_san_pham ASC";
         break;
     case 'name_desc':
-        $order_clause = "p.name DESC";
+        $order_clause = "sp.ten_san_pham DESC";
         break;
     case 'rating':
-        $order_clause = "p.rating_average DESC, p.rating_count DESC";
+        $order_clause = "sp.diem_danh_gia_tb DESC, sp.so_luong_danh_gia DESC";
         break;
     case 'popular':
-        $order_clause = "p.view_count DESC, p.sold_count DESC";
+        $order_clause = "sp.luot_xem DESC, sp.so_luong_ban DESC";
         break;
     case 'newest':
     default:
-        $order_clause = "p.created_at DESC";
+        $order_clause = "sp.ngay_tao DESC";
         break;
 }
 
-// Câu SQL chính
+// 🔧 SỬA: Câu SQL với bảng san_pham_chinh
 $base_sql = "
-    SELECT p.*, c.name as category_name,
-           COALESCE(p.sale_price, p.price) as current_price,
+    SELECT sp.*, dm.ten_danh_muc as category_name,
+           COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as current_price,
            CASE 
-               WHEN p.sale_price IS NOT NULL AND p.sale_price < p.price 
-               THEN ROUND(((p.price - p.sale_price) / p.price) * 100, 0)
+               WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+               THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
                ELSE 0
-           END as discount_percent
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
+           END as discount_percent,
+           (SELECT SUM(bsp.so_luong_ton_kho) 
+            FROM bien_the_san_pham bsp 
+            WHERE bsp.san_pham_id = sp.id AND bsp.trang_thai = 'hoat_dong') as total_stock
+    FROM san_pham_chinh sp
+    LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
 ";
 
 $where_clause = implode(" AND ", $where_conditions);
-$main_sql = $base_sql . " WHERE " . $where_clause . " AND p.stock_quantity > 0 ORDER BY " . $order_clause;
+$main_sql = $base_sql . " WHERE " . $where_clause . " HAVING total_stock > 0 ORDER BY " . $order_clause;
 
 // Đếm tổng số sản phẩm
-$count_sql = "SELECT COUNT(*) FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . $where_clause . " AND p.stock_quantity > 0";
+$count_sql = "
+    SELECT COUNT(*) 
+    FROM san_pham_chinh sp 
+    LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id 
+    WHERE " . $where_clause . " 
+    AND (SELECT SUM(bsp.so_luong_ton_kho) 
+         FROM bien_the_san_pham bsp 
+         WHERE bsp.san_pham_id = sp.id AND bsp.trang_thai = 'hoat_dong') > 0
+";
 
 try {
     $count_stmt = $pdo->prepare($count_sql);
@@ -121,32 +132,32 @@ try {
     $stmt->execute([...$params, $limit, $offset]);
     $products = $stmt->fetchAll();
 
-    // Lấy dữ liệu cho bộ lọc
+    // 🔧 SỬA: Lấy dữ liệu cho bộ lọc từ bảng đúng
     $categories = $pdo->query("
-        SELECT c.*, COUNT(p.id) as product_count
-        FROM categories c
-        LEFT JOIN products p ON c.id = p.category_id AND p.status = 'active'
-        WHERE c.status = 'active'
-        GROUP BY c.id
+        SELECT dm.*, COUNT(sp.id) as product_count
+        FROM danh_muc_giay dm
+        LEFT JOIN san_pham_chinh sp ON dm.id = sp.danh_muc_id AND sp.trang_thai = 'hoat_dong'
+        WHERE dm.trang_thai = 'hoat_dong'
+        GROUP BY dm.id
         HAVING product_count > 0
-        ORDER BY c.sort_order ASC
+        ORDER BY dm.thu_tu_sap_xep ASC
     ")->fetchAll();
 
     $brands = $pdo->query("
-        SELECT brand, COUNT(*) as product_count
-        FROM products 
-        WHERE status = 'active' AND brand IS NOT NULL AND brand != ''
-        GROUP BY brand
-        ORDER BY brand ASC
+        SELECT thuong_hieu as brand, COUNT(*) as product_count
+        FROM san_pham_chinh 
+        WHERE trang_thai = 'hoat_dong' AND thuong_hieu IS NOT NULL AND thuong_hieu != ''
+        GROUP BY thuong_hieu
+        ORDER BY thuong_hieu ASC
     ")->fetchAll();
 
     // Lấy khoảng giá
     $price_range = $pdo->query("
         SELECT 
-            MIN(COALESCE(sale_price, price)) as min_price,
-            MAX(COALESCE(sale_price, price)) as max_price
-        FROM products 
-        WHERE status = 'active'
+            MIN(COALESCE(gia_khuyen_mai, gia_goc)) as min_price,
+            MAX(COALESCE(gia_khuyen_mai, gia_goc)) as max_price
+        FROM san_pham_chinh 
+        WHERE trang_thai = 'hoat_dong'
     ")->fetch();
 
 } catch (Exception $e) {
@@ -343,7 +354,7 @@ function displayStars($rating) {
                             <?php foreach ($categories as $cat): ?>
                                 <a href="<?= updateUrlParam('category', $cat['id']) ?>" 
                                    class="list-group-item list-group-item-action border-0 px-0 py-2 d-flex justify-content-between <?= $category == $cat['id'] ? 'active' : '' ?>">
-                                    <?= htmlspecialchars($cat['name']) ?>
+                                    <?= htmlspecialchars($cat['ten_danh_muc'] ?? $cat['name']) ?>
                                     <span class="badge bg-secondary"><?= $cat['product_count'] ?></span>
                                 </a>
                             <?php endforeach; ?>
@@ -441,43 +452,43 @@ function displayStars($rating) {
                                             <span class="badge bg-danger badge-sale">-<?= $product['discount_percent'] ?>%</span>
                                         <?php endif; ?>
                                         
-                                        <?php if ($product['is_featured']): ?>
+                                        <?php if ($product['san_pham_noi_bat']): ?>
                                             <span class="badge bg-success position-absolute" style="top: 10px; left: 10px; z-index: 1;">Nổi bật</span>
                                         <?php endif; ?>
                                         
-                                        <img src="<?= !empty($product['main_image']) ? '/tktshop/uploads/products/' . htmlspecialchars($product['main_image']) : '/tktshop/uploads/products/no-image.jpg' ?>" 
+                                        <img src="<?= !empty($product['hinh_anh_chinh']) ? '/tktshop/uploads/products/' . htmlspecialchars($product['hinh_anh_chinh']) : '/tktshop/uploads/products/no-image.jpg' ?>" 
                                              class="card-img-top product-image" 
-                                             alt="<?= htmlspecialchars($product['name']) ?>"
+                                             alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                              loading="lazy"
                                              onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
                                     </div>
                                     
                                     <div class="card-body">
                                         <h6 class="card-title mb-2">
-                                            <a href="product_detail.php?id=<?= $product['id'] ?>" 
+                                            <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" 
                                                class="text-decoration-none text-dark">
-                                                <?= htmlspecialchars($product['name']) ?>
+                                                <?= htmlspecialchars($product['ten_san_pham']) ?>
                                             </a>
                                         </h6>
                                         
-                                        <?php if ($product['brand']): ?>
+                                        <?php if ($product['thuong_hieu']): ?>
                                         <p class="text-muted small mb-2">
-                                            <i class="fas fa-tag"></i> <?= htmlspecialchars($product['brand']) ?>
+                                            <i class="fas fa-tag"></i> <?= htmlspecialchars($product['thuong_hieu']) ?>
                                         </p>
                                         <?php endif; ?>
                                         
-                                        <?php if ($product['short_description']): ?>
+                                        <?php if ($product['mo_ta_ngan']): ?>
                                             <p class="card-text small text-muted mb-3">
-                                                <?= mb_substr(htmlspecialchars($product['short_description']), 0, 80) ?>...
+                                                <?= mb_substr(htmlspecialchars($product['mo_ta_ngan']), 0, 80) ?>...
                                             </p>
                                         <?php endif; ?>
                                         
                                         <!-- Rating -->
-                                        <?php if ($product['rating_average'] > 0): ?>
+                                        <?php if ($product['diem_danh_gia_tb'] > 0): ?>
                                             <div class="mb-2">
-                                                <?= displayStars(round($product['rating_average'])) ?>
+                                                <?= displayStars(round($product['diem_danh_gia_tb'])) ?>
                                                 <span class="text-muted small">
-                                                    (<?= $product['rating_count'] ?: 0 ?>)
+                                                    (<?= $product['so_luong_danh_gia'] ?: 0 ?>)
                                                 </span>
                                             </div>
                                         <?php endif; ?>
@@ -485,19 +496,19 @@ function displayStars($rating) {
                                         <!-- Price -->
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div class="price">
-                                                <?php if ($product['sale_price'] && $product['sale_price'] < $product['price']): ?>
-                                                    <span class="price-sale h6 mb-0"><?= formatPrice($product['sale_price']) ?></span>
+                                                <?php if ($product['gia_khuyen_mai'] && $product['gia_khuyen_mai'] < $product['gia_goc']): ?>
+                                                    <span class="price-sale h6 mb-0"><?= formatPrice($product['gia_khuyen_mai']) ?></span>
                                                     <br>
-                                                    <small class="price-original"><?= formatPrice($product['price']) ?></small>
+                                                    <small class="price-original"><?= formatPrice($product['gia_goc']) ?></small>
                                                 <?php else: ?>
-                                                    <span class="h6 mb-0"><?= formatPrice($product['price']) ?></span>
+                                                    <span class="h6 mb-0"><?= formatPrice($product['gia_goc']) ?></span>
                                                 <?php endif; ?>
                                             </div>
                                             
-                                            <?php if ($product['stock_quantity'] <= 5): ?>
+                                            <?php if ($product['total_stock'] <= 5): ?>
                                                 <small class="text-danger">
                                                     <i class="fas fa-exclamation-triangle"></i> 
-                                                    Còn <?= $product['stock_quantity'] ?>
+                                                    Còn <?= $product['total_stock'] ?>
                                                 </small>
                                             <?php endif; ?>
                                         </div>
