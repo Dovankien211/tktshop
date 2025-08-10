@@ -1,7 +1,7 @@
 <?php
 /**
- * TKT Shop - Add Product Page (Fixed & Beautiful)
- * Trang thêm sản phẩm mới với giao diện đẹp
+ * TKT Shop - Add Product Page (Complete Fixed Version)
+ * Trang thêm sản phẩm mới - Đã sửa hoàn toàn lỗi try-catch
  */
 
 // Start session first
@@ -10,7 +10,7 @@ session_start();
 require_once '../../config/config.php';
 require_once '../../config/database.php';
 
-// Auto-create categories table and sample data if not exists
+// Auto-create all required tables and sample data
 try {
     // Tạo bảng categories nếu chưa có
     $pdo->exec("
@@ -53,10 +53,7 @@ try {
             $stmt->execute($cat);
         }
     }
-}
-
-// Tự động tạo bảng sizes và colors nếu chưa có
-try {
+    
     // Tạo bảng sizes
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS sizes (
@@ -108,11 +105,41 @@ try {
             $color_stmt->execute([$color[0], $color[1]]);
         }
     }
-} catch (Exception $e) {
-    error_log("Auto-create sizes/colors error: " . $e->getMessage());
+    
+    // Tạo bảng products nếu chưa có
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS products (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255),
+            description TEXT,
+            short_description TEXT,
+            price DECIMAL(10,2) NOT NULL,
+            sale_price DECIMAL(10,2) DEFAULT NULL,
+            sku VARCHAR(100) UNIQUE,
+            category_id INT,
+            brand VARCHAR(100),
+            weight DECIMAL(8,2) DEFAULT 0,
+            dimensions VARCHAR(100),
+            stock_quantity INT DEFAULT 0,
+            min_quantity INT DEFAULT 1,
+            status VARCHAR(20) DEFAULT 'active',
+            is_featured BOOLEAN DEFAULT FALSE,
+            main_image VARCHAR(255),
+            gallery_images TEXT,
+            meta_title VARCHAR(255),
+            meta_description TEXT,
+            tags TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_status (status),
+            INDEX idx_category (category_id),
+            INDEX idx_sku (sku)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 } catch (Exception $e) {
     // Nếu có lỗi, ghi log nhưng không dừng chương trình
-    error_log("Auto-create categories error: " . $e->getMessage());
+    error_log("Auto-create database tables error: " . $e->getMessage());
 }
 
 // Kiểm tra đăng nhập admin
@@ -348,25 +375,6 @@ try {
         // Nếu không có bảng nào, tạo categories array trống và thông báo
         $categories = [];
         $errors[] = "Không tìm thấy danh mục. Vui lòng chạy file setup hoặc tạo danh mục trước.";
-        
-        // Hiển thị thông tin debug nếu cần
-        if (isset($_GET['debug'])) {
-            try {
-                $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-                $category_tables = array_filter($tables, function($table) {
-                    return strpos(strtolower($table), 'categ') !== false || 
-                           strpos(strtolower($table), 'danh_muc') !== false;
-                });
-                
-                if (!empty($category_tables)) {
-                    $errors[] = "Tìm thấy các bảng có thể liên quan: " . implode(', ', $category_tables);
-                } else {
-                    $errors[] = "Không tìm thấy bảng danh mục nào. Các bảng hiện có: " . implode(', ', array_slice($tables, 0, 10));
-                }
-            } catch (Exception $e3) {
-                $errors[] = "Không thể truy vấn database: " . $e3->getMessage();
-            }
-        }
     }
 }
 ?>
@@ -1346,7 +1354,7 @@ try {
 
         function setupCharacterCounters() {
             const fields = [
-                { input: 'input[name="short_description"]', max: 200 },
+                { input: 'textarea[name="short_description"]', max: 200 },
                 { input: 'input[name="meta_title"]', max: 60 },
                 { input: 'textarea[name="meta_description"]', max: 160 }
             ];
