@@ -60,14 +60,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             
             $current_price = $product_for_cart['sale_price'] ?: $product_for_cart['price'];
             
-            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
+            // ✅ FIX 1: Sửa query check cart
             $check_cart = $pdo->prepare("
                 SELECT * FROM gio_hang 
                 WHERE san_pham_id = ? 
                 AND (khach_hang_id = ? OR session_id = ?)
-                AND bien_the_id IS NULL
+                AND bien_the_id = ?
             ");
-            $check_cart->execute([$product_for_cart['id'], $customer_id, $session_id]);
+            $check_cart->execute([$product_for_cart['id'], $customer_id, $session_id, $product_for_cart['id']]);
             $existing_item = $check_cart->fetch();
             
             if ($existing_item) {
@@ -80,10 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
                     ->execute([$new_quantity, $current_price, $existing_item['id']]);
             } else {
+                // ✅ FIX 2: Thêm bien_the_id vào INSERT
                 $pdo->prepare("
-                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, so_luong, gia_tai_thoi_diem, ngay_them)
-                    VALUES (?, ?, ?, ?, ?, NOW())
-                ")->execute([$customer_id, $session_id, $product_for_cart['id'], $so_luong, $current_price]);
+                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())
+                ")->execute([$customer_id, $session_id, $product_for_cart['id'], $product_for_cart['id'], $so_luong, $current_price]);
             }
             
             echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
