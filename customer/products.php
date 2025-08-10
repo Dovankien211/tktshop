@@ -1,7 +1,7 @@
 <?php
 /**
- * customer/products.php - Fixed Version
- * Danh sách sản phẩm với cấu trúc bảng đúng
+ * customer/products.php - Fixed Version (Keep original table structure)
+ * Danh sách sản phẩm với cấu trúc bảng gốc
  */
 
 require_once __DIR__ . '/../config/database.php';
@@ -91,7 +91,7 @@ switch ($sort) {
         break;
 }
 
-// Câu SQL chính
+// Câu SQL chính - GIỮ NGUYÊN BẢNG GỐC
 $base_sql = "
     SELECT p.*, c.name as category_name,
            COALESCE(p.sale_price, p.price) as current_price,
@@ -454,10 +454,17 @@ function displayStars($rating) {
                                     
                                     <div class="card-body">
                                         <h6 class="card-title mb-2">
-                                            <a href="product_detail.php?id=<?= $product['id'] ?>" 
-                                               class="text-decoration-none text-dark">
-                                                <?= htmlspecialchars($product['name']) ?>
-                                            </a>
+                                            <?php if (!empty($product['slug'])): ?>
+                                                <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" 
+                                                   class="text-decoration-none text-dark">
+                                                    <?= htmlspecialchars($product['name']) ?>
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="product_detail.php?id=<?= $product['id'] ?>" 
+                                                   class="text-decoration-none text-dark">
+                                                    <?= htmlspecialchars($product['name']) ?>
+                                                </a>
+                                            <?php endif; ?>
                                         </h6>
                                         
                                         <?php if ($product['brand']): ?>
@@ -504,9 +511,15 @@ function displayStars($rating) {
                                         
                                         <!-- Actions -->
                                         <div class="mt-3 d-grid gap-2">
-                                            <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" class="btn btn-primary btn-sm">
-                                                <i class="fas fa-eye"></i> Xem chi tiết
-                                            </a>
+                                            <?php if (!empty($product['slug'])): ?>
+                                                <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" class="btn btn-primary btn-sm">
+                                                    <i class="fas fa-eye"></i> Xem chi tiết
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="product_detail.php?id=<?= $product['id'] ?>" class="btn btn-primary btn-sm">
+                                                    <i class="fas fa-eye"></i> Xem chi tiết
+                                                </a>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
