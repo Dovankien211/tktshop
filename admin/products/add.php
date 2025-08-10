@@ -1,511 +1,749 @@
 <?php
-session_start();
-require_once '../../config/database.php';
+/**
+ * TKT Shop - Add Product Page
+ * Trang thêm sản phẩm mới
+ */
+
 require_once '../../config/config.php';
+require_once '../../config/database.php';
 
-// Tạm thời bypass login check để test
-if (!isset($_SESSION['user_id'])) {
-    $_SESSION['user_id'] = 1;
-    $_SESSION['role'] = 'admin';
-    $_SESSION['admin_name'] = 'Test Admin';
+// Kiểm tra đăng nhập admin
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: ../login.php');
+    exit;
 }
 
-$error = '';
+$page_title = "Add New Product";
+$errors = [];
 $success = '';
-
-// Lấy danh sách danh mục
-$categories = [];
-try {
-    $stmt = $pdo->query("SELECT * FROM danh_muc_giay ORDER BY ten_danh_muc ASC");
-    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Lỗi khi tải danh mục: " . $e->getMessage();
-}
 
 // Xử lý form submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        echo "🔍 DEBUG: Form đã submit<br>";
-        
-        // Lấy dữ liệu từ form
-        $ten_san_pham = trim($_POST['ten_san_pham'] ?? '');
-        $thuong_hieu = trim($_POST['thuong_hieu'] ?? '');
-        $danh_muc_id = (int)($_POST['danh_muc_id'] ?? 0);
-        $gia_goc = (int)($_POST['gia_goc'] ?? 0);
-        $gia_khuyen_mai = !empty($_POST['gia_khuyen_mai']) ? (int)$_POST['gia_khuyen_mai'] : null;
-        $mo_ta_ngan = trim($_POST['mo_ta_ngan'] ?? '');
-        $mo_ta_chi_tiet = trim($_POST['mo_ta_chi_tiet'] ?? '');
-        $trang_thai = $_POST['trang_thai'] ?? 'hoat_dong';
-        
-        // Validate cơ bản
-        if (empty($ten_san_pham)) throw new Exception("Tên sản phẩm không được để trống!");
-        if (empty($thuong_hieu)) throw new Exception("Thương hiệu không được để trống!");
-        if ($danh_muc_id <= 0) throw new Exception("Vui lòng chọn danh mục!");
-        if ($gia_goc <= 0) throw new Exception("Giá gốc phải lớn hơn 0!");
-        if (empty($mo_ta_ngan)) throw new Exception("Mô tả ngắn không được để trống!");
-        
-        // Tạo mã sản phẩm tự động
-        $ma_san_pham = strtoupper($thuong_hieu . '-' . date('YmdHis') . '-' . rand(100, 999));
-        
-        // Tạo slug đơn giản
-        $slug = strtolower(str_replace([' ', 'đ', 'ă', 'â', 'ê', 'ô', 'ơ', 'ư'], ['-', 'd', 'a', 'a', 'e', 'o', 'o', 'u'], $ten_san_pham)) . '-' . time();
-        
-        // Xử lý upload ảnh chính
-        $hinh_anh_chinh = null;
-        if (isset($_FILES['hinh_anh_chinh']) && $_FILES['hinh_anh_chinh']['error'] === UPLOAD_ERR_OK) {
-            echo "🔍 DEBUG: Đang upload ảnh chính<br>";
-            
-            $file = $_FILES['hinh_anh_chinh'];
-            $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-            $file_type = mime_content_type($file['tmp_name']);
-            
-            if (!in_array($file_type, $allowed_types)) {
-                throw new Exception("Định dạng ảnh không hợp lệ! Chỉ chấp nhận: JPG, PNG, GIF");
-            }
-            
-            if ($file['size'] > 2 * 1024 * 1024) {
-                throw new Exception("Ảnh quá lớn! Tối đa 2MB");
-            }
-            
-            // Tạo thư mục nếu chưa có
-            $upload_dir = '../../uploads/products';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-            
-            // Tạo tên file unique
-            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-            $hinh_anh_chinh = time() . '_' . uniqid() . '.' . strtolower($extension);
-            $target_path = $upload_dir . '/' . $hinh_anh_chinh;
-            
-            if (!move_uploaded_file($file['tmp_name'], $target_path)) {
-                throw new Exception("Lỗi khi upload ảnh!");
-            }
-            
-            echo "🔍 DEBUG: Upload ảnh thành công: $hinh_anh_chinh<br>";
+    $name = trim($_POST['name'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $short_description = trim($_POST['short_description'] ?? '');
+    $price = $_POST['price'] ?? 0;
+    $sale_price = $_POST['sale_price'] ?? null;
+    $sku = trim($_POST['sku'] ?? '');
+    $category_id = $_POST['category_id'] ?? 0;
+    $brand = trim($_POST['brand'] ?? '');
+    $weight = $_POST['weight'] ?? 0;
+    $dimensions = trim($_POST['dimensions'] ?? '');
+    $quantity = $_POST['quantity'] ?? 0;
+    $min_quantity = $_POST['min_quantity'] ?? 1;
+    $status = $_POST['status'] ?? 'active';
+    $featured = isset($_POST['featured']) ? 1 : 0;
+    $meta_title = trim($_POST['meta_title'] ?? '');
+    $meta_description = trim($_POST['meta_description'] ?? '');
+    $tags = trim($_POST['tags'] ?? '');
+    
+    // Validation
+    if (empty($name)) {
+        $errors[] = "Product name is required";
+    }
+    
+    if (empty($description)) {
+        $errors[] = "Product description is required";
+    }
+    
+    if (!is_numeric($price) || $price <= 0) {
+        $errors[] = "Valid price is required";
+    }
+    
+    if (!empty($sale_price) && (!is_numeric($sale_price) || $sale_price >= $price)) {
+        $errors[] = "Sale price must be less than regular price";
+    }
+    
+    if (empty($sku)) {
+        $errors[] = "SKU is required";
+    } else {
+        // Kiểm tra SKU trùng lặp
+        $check_sku = $pdo->prepare("SELECT COUNT(*) FROM products WHERE sku = ?");
+        $check_sku->execute([$sku]);
+        if ($check_sku->fetchColumn() > 0) {
+            $errors[] = "SKU already exists";
         }
-        
-        // Xử lý upload ảnh phụ (nếu có)
-        $hinh_anh_phu = [];
-        if (isset($_FILES['hinh_anh_phu']) && is_array($_FILES['hinh_anh_phu']['name'])) {
-            echo "🔍 DEBUG: Đang upload ảnh phụ<br>";
-            
-            for ($i = 0; $i < count($_FILES['hinh_anh_phu']['name']); $i++) {
-                if ($_FILES['hinh_anh_phu']['error'][$i] === UPLOAD_ERR_OK) {
-                    $file = [
-                        'name' => $_FILES['hinh_anh_phu']['name'][$i],
-                        'type' => $_FILES['hinh_anh_phu']['type'][$i],
-                        'tmp_name' => $_FILES['hinh_anh_phu']['tmp_name'][$i],
-                        'error' => $_FILES['hinh_anh_phu']['error'][$i],
-                        'size' => $_FILES['hinh_anh_phu']['size'][$i]
-                    ];
-                    
-                    if ($file['size'] <= 2 * 1024 * 1024) {
-                        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-                        $filename = time() . '_' . uniqid() . '_' . $i . '.' . strtolower($extension);
-                        $target_path = $upload_dir . '/' . $filename;
-                        
-                        if (move_uploaded_file($file['tmp_name'], $target_path)) {
-                            $hinh_anh_phu[] = $filename;
-                        }
-                    }
+    }
+    
+    if (!$category_id) {
+        $errors[] = "Please select a category";
+    }
+    
+    if (!is_numeric($quantity) || $quantity < 0) {
+        $errors[] = "Valid quantity is required";
+    }
+    
+    // Xử lý upload ảnh chính
+    $main_image = '';
+    if (isset($_FILES['main_image']) && $_FILES['main_image']['error'] === UPLOAD_ERR_OK) {
+        $upload_result = uploadProductImage($_FILES['main_image']);
+        if ($upload_result['success']) {
+            $main_image = $upload_result['filename'];
+        } else {
+            $errors[] = $upload_result['message'];
+        }
+    }
+    
+    // Xử lý upload gallery
+    $gallery_images = [];
+    if (isset($_FILES['gallery_images'])) {
+        foreach ($_FILES['gallery_images']['tmp_name'] as $key => $tmp_name) {
+            if ($_FILES['gallery_images']['error'][$key] === UPLOAD_ERR_OK) {
+                $file = [
+                    'name' => $_FILES['gallery_images']['name'][$key],
+                    'type' => $_FILES['gallery_images']['type'][$key],
+                    'tmp_name' => $tmp_name,
+                    'size' => $_FILES['gallery_images']['size'][$key]
+                ];
+                
+                $upload_result = uploadProductImage($file);
+                if ($upload_result['success']) {
+                    $gallery_images[] = $upload_result['filename'];
                 }
             }
         }
-        
-        $hinh_anh_phu_json = !empty($hinh_anh_phu) ? json_encode($hinh_anh_phu) : null;
-        
-        // Insert sản phẩm (chỉ dùng cột có sẵn)
-        $sql = "INSERT INTO san_pham_chinh (
-                    ma_san_pham, ten_san_pham, slug, thuong_hieu, danh_muc_id,
-                    gia_goc, gia_khuyen_mai, mo_ta_ngan, mo_ta_chi_tiet, 
-                    hinh_anh_chinh, trang_thai, ngay_tao, ngay_cap_nhat
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
-        
-        $stmt = $pdo->prepare($sql);
-        $result = $stmt->execute([
-            $ma_san_pham, $ten_san_pham, $slug, $thuong_hieu, $danh_muc_id,
-            $gia_goc, $gia_khuyen_mai, $mo_ta_ngan, $mo_ta_chi_tiet,
-            $hinh_anh_chinh, $trang_thai
-        ]);
-        
-        if ($result) {
-            $product_id = $pdo->lastInsertId();
-            echo "🔍 DEBUG: Insert thành công! Product ID: $product_id<br>";
+    }
+    
+    // Nếu không có lỗi, thêm sản phẩm vào database
+    if (empty($errors)) {
+        try {
+            $pdo->beginTransaction();
             
-            // Nếu có ảnh phụ, có thể lưu riêng vào bảng khác (tùy chọn)
-            if (!empty($hinh_anh_phu)) {
-                echo "🔍 DEBUG: Có " . count($hinh_anh_phu) . " ảnh phụ (sẽ cần bảng riêng để lưu)<br>";
+            // Tạo slug từ tên sản phẩm
+            $slug = createSlug($name);
+            
+            // Insert sản phẩm
+            $stmt = $pdo->prepare("
+                INSERT INTO products (
+                    name, slug, description, short_description, price, sale_price, 
+                    sku, category_id, brand, weight, dimensions, quantity, min_quantity,
+                    status, featured, image, gallery, meta_title, meta_description, 
+                    tags, created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
+                )
+            ");
+            
+            $stmt->execute([
+                $name, $slug, $description, $short_description, $price, $sale_price,
+                $sku, $category_id, $brand, $weight, $dimensions, $quantity, $min_quantity,
+                $status, $featured, $main_image, json_encode($gallery_images), 
+                $meta_title, $meta_description, $tags
+            ]);
+            
+            $product_id = $pdo->lastInsertId();
+            
+            // Xử lý variants nếu có
+            if (isset($_POST['variants']) && is_array($_POST['variants'])) {
+                foreach ($_POST['variants'] as $variant) {
+                    if (!empty($variant['color']) || !empty($variant['size'])) {
+                        $variant_stmt = $pdo->prepare("
+                            INSERT INTO product_variants (product_id, color, size, price_adjustment, quantity)
+                            VALUES (?, ?, ?, ?, ?)
+                        ");
+                        $variant_stmt->execute([
+                            $product_id,
+                            $variant['color'] ?? '',
+                            $variant['size'] ?? '',
+                            $variant['price_adjustment'] ?? 0,
+                            $variant['quantity'] ?? 0
+                        ]);
+                    }
+                }
             }
             
-            $success = "✅ Thêm sản phẩm thành công! ID: $product_id. Ảnh chính: " . ($hinh_anh_chinh ? "Có" : "Không có");
+            $pdo->commit();
+            $success = "Product added successfully!";
             
-            // Reset form
-            $_POST = [];
-        } else {
-            throw new Exception("Lỗi khi insert vào database");
+            // Log admin activity
+            logAdminActivity("ADD_PRODUCT", "Added product: $name (ID: $product_id)");
+            
+            // Redirect sau khi thành công
+            header("Location: index.php?success=" . urlencode($success));
+            exit;
+            
+        } catch (Exception $e) {
+            $pdo->rollback();
+            $errors[] = "Database error: " . $e->getMessage();
         }
-        
-    } catch (Exception $e) {
-        $error = "❌ Lỗi: " . $e->getMessage();
-        echo "🔍 DEBUG Error: " . $e->getMessage() . "<br>";
     }
 }
+
+// Lấy danh sách categories
+$categories = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name")->fetchAll();
+
+// Lấy danh sách colors và sizes
+$colors = $pdo->query("SELECT * FROM colors ORDER BY name")->fetchAll();
+$sizes = $pdo->query("SELECT * FROM sizes ORDER BY sort_order")->fetchAll();
+
+include '../layouts/header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thêm sản phẩm - TKT Shop Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        .upload-area {
-            border: 2px dashed #ddd;
-            border-radius: 8px;
-            padding: 2rem;
-            text-align: center;
-            transition: border-color 0.3s ease;
-            cursor: pointer;
-        }
-        .upload-area:hover {
-            border-color: #007bff;
-        }
-        .upload-area.dragover {
-            border-color: #007bff;
-            background-color: #f8f9fa;
-        }
-        .image-preview {
-            max-width: 150px;
-            max-height: 150px;
-            object-fit: cover;
-            border-radius: 8px;
-            margin: 5px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-2 p-0">
-                <?php include '../layouts/sidebar.php'; ?>
-            </div>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="p-4">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h1 class="h2">📷 Thêm sản phẩm mới (có ảnh)</h1>
-                        <a href="index.php" class="btn btn-outline-secondary">
-                            <i class="fas fa-arrow-left"></i> Quay lại
-                        </a>
-                    </div>
-
-                    <!-- Alert Messages -->
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger alert-dismissible fade show">
-                            <i class="fas fa-exclamation-triangle"></i> <?= $error ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($success): ?>
-                        <div class="alert alert-success alert-dismissible fade show">
-                            <i class="fas fa-check-circle"></i> <?= $success ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            <div class="mt-2">
-                                <a href="index.php" class="btn btn-sm btn-success">📋 Xem danh sách</a>
-                                <a href="/tktshop/customer/" class="btn btn-sm btn-info" target="_blank">🛒 Xem trang khách</a>
-                                <button type="button" class="btn btn-sm btn-primary" onclick="location.reload()">➕ Thêm sản phẩm khác</button>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-
-                    <form method="POST" enctype="multipart/form-data" id="productForm">
-                        <div class="row">
-                            <!-- Left Column -->
-                            <div class="col-md-8">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5><i class="fas fa-info-circle me-2"></i>Thông tin sản phẩm</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-md-8">
-                                                <div class="mb-3">
-                                                    <label for="ten_san_pham" class="form-label">Tên sản phẩm <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control" id="ten_san_pham" name="ten_san_pham" 
-                                                           value="<?= htmlspecialchars($_POST['ten_san_pham'] ?? '') ?>" required>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label for="thuong_hieu" class="form-label">Thương hiệu <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control" id="thuong_hieu" name="thuong_hieu" 
-                                                           value="<?= htmlspecialchars($_POST['thuong_hieu'] ?? '') ?>" 
-                                                           list="brandsList" required>
-                                                    <datalist id="brandsList">
-                                                        <option value="Nike">
-                                                        <option value="Adidas">
-                                                        <option value="Converse">
-                                                        <option value="Vans">
-                                                        <option value="Puma">
-                                                    </datalist>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="danh_muc_id" class="form-label">Danh mục <span class="text-danger">*</span></label>
-                                                    <select class="form-select" id="danh_muc_id" name="danh_muc_id" required>
-                                                        <option value="">Chọn danh mục</option>
-                                                        <?php foreach ($categories as $category): ?>
-                                                            <option value="<?= $category['id'] ?>" 
-                                                                    <?= (($_POST['danh_muc_id'] ?? '') == $category['id']) ? 'selected' : '' ?>>
-                                                                <?= htmlspecialchars($category['ten_danh_muc']) ?>
-                                                            </option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="trang_thai" class="form-label">Trạng thái</label>
-                                                    <select class="form-select" id="trang_thai" name="trang_thai">
-                                                        <option value="hoat_dong" <?= (($_POST['trang_thai'] ?? 'hoat_dong') === 'hoat_dong') ? 'selected' : '' ?>>✅ Hoạt động (hiển thị cho khách)</option>
-                                                        <option value="an" <?= (($_POST['trang_thai'] ?? '') === 'an') ? 'selected' : '' ?>>❌ Ẩn sản phẩm</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="gia_goc" class="form-label">Giá gốc <span class="text-danger">*</span></label>
-                                                    <div class="input-group">
-                                                        <input type="number" class="form-control" id="gia_goc" name="gia_goc" 
-                                                               value="<?= htmlspecialchars($_POST['gia_goc'] ?? '') ?>" 
-                                                               min="1000" step="1000" required>
-                                                        <span class="input-group-text">₫</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="gia_khuyen_mai" class="form-label">Giá khuyến mãi</label>
-                                                    <div class="input-group">
-                                                        <input type="number" class="form-control" id="gia_khuyen_mai" name="gia_khuyen_mai" 
-                                                               value="<?= htmlspecialchars($_POST['gia_khuyen_mai'] ?? '') ?>" 
-                                                               min="1000" step="1000">
-                                                        <span class="input-group-text">₫</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label for="mo_ta_ngan" class="form-label">Mô tả ngắn <span class="text-danger">*</span></label>
-                                            <textarea class="form-control" id="mo_ta_ngan" name="mo_ta_ngan" rows="3" 
-                                                      required><?= htmlspecialchars($_POST['mo_ta_ngan'] ?? '') ?></textarea>
-                                            <div class="form-text">Mô tả này sẽ hiển thị trong danh sách sản phẩm</div>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label for="mo_ta_chi_tiet" class="form-label">Mô tả chi tiết</label>
-                                            <textarea class="form-control" id="mo_ta_chi_tiet" name="mo_ta_chi_tiet" rows="6"><?= htmlspecialchars($_POST['mo_ta_chi_tiet'] ?? '') ?></textarea>
-                                            <div class="form-text">Mô tả chi tiết sẽ hiển thị trong trang chi tiết sản phẩm</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Right Column - Images -->
-                            <div class="col-md-4">
-                                <!-- Main Image Upload -->
-                                <div class="card mb-3">
-                                    <div class="card-header">
-                                        <h6><i class="fas fa-camera me-2"></i>Ảnh chính sản phẩm</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="upload-area" onclick="document.getElementById('hinh_anh_chinh').click()">
-                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
-                                            <p class="mb-2">Click để chọn ảnh chính</p>
-                                            <small class="text-muted">JPG, PNG, GIF (max 2MB)</small>
-                                        </div>
-                                        <input type="file" class="form-control" id="hinh_anh_chinh" name="hinh_anh_chinh" 
-                                               accept="image/*" style="display: none;" onchange="previewMainImage(this)">
-                                        <div id="mainImagePreview"></div>
-                                    </div>
-                                </div>
-
-                                <!-- Sub Images Upload -->
-                                <div class="card mb-3">
-                                    <div class="card-header">
-                                        <h6><i class="fas fa-images me-2"></i>Ảnh phụ (tùy chọn)</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="upload-area" onclick="document.getElementById('hinh_anh_phu').click()">
-                                            <i class="fas fa-images fa-2x text-muted mb-2"></i>
-                                            <p class="mb-2">Click để chọn nhiều ảnh</p>
-                                            <small class="text-muted">Có thể chọn nhiều ảnh</small>
-                                        </div>
-                                        <input type="file" class="form-control" id="hinh_anh_phu" name="hinh_anh_phu[]" 
-                                               accept="image/*" multiple style="display: none;" onchange="previewSubImages(this)">
-                                        <div id="subImagesPreview"></div>
-                                    </div>
-                                </div>
-
-                                <!-- Test Data -->
-                                <div class="card mb-3">
-                                    <div class="card-header">
-                                        <h6><i class="fas fa-magic me-2"></i>Dữ liệu test</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="fillTestData()">
-                                            <i class="fas fa-fill-drip"></i> Điền dữ liệu test
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Submit -->
-                                <div class="card">
-                                    <div class="card-body">
-                                        <button type="submit" class="btn btn-success w-100 mb-2">
-                                            <i class="fas fa-save"></i> Lưu sản phẩm
-                                        </button>
-                                        <a href="index.php" class="btn btn-outline-secondary w-100">
-                                            <i class="fas fa-times"></i> Hủy bỏ
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
+<div class="content-area">
+    <div class="page-header">
+        <h1 class="page-title">Add New Product</h1>
+        <div class="page-actions">
+            <a href="index.php" class="btn btn-light">
+                <i class="fas fa-arrow-left"></i> Back to Products
+            </a>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function fillTestData() {
-            document.getElementById('ten_san_pham').value = 'Giày Nike Air Force 1 Low Triple White';
-            document.getElementById('thuong_hieu').value = 'Nike';
-            document.getElementById('gia_goc').value = '2890000';
-            document.getElementById('gia_khuyen_mai').value = '2590000';
-            document.getElementById('mo_ta_ngan').value = 'Giày Nike Air Force 1 Low màu trắng toàn phần, thiết kế cổ điển, phù hợp mọi phong cách.';
-            document.getElementById('mo_ta_chi_tiet').value = 'Nike Air Force 1 Low Triple White là một trong những mẫu giày thể thao kinh điển nhất mọi thời đại. Với thiết kế toàn màu trắng tinh khôi, đôi giày này dễ dàng phối hợp với mọi trang phục và phù hợp cho nhiều dịp khác nhau.';
-            
-            // Select first category
-            const categorySelect = document.getElementById('danh_muc_id');
-            if (categorySelect.options.length > 1) {
-                categorySelect.selectedIndex = 1;
-            }
-            
-            alert('✅ Đã điền dữ liệu test! Hãy chọn ảnh để hoàn thiện.');
-        }
+    <?php if (!empty($errors)): ?>
+        <div class="alert alert-danger">
+            <ul class="mb-0">
+                <?php foreach ($errors as $error): ?>
+                    <li><?php echo htmlspecialchars($error); ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
 
-        function previewMainImage(input) {
-            const preview = document.getElementById('mainImagePreview');
-            preview.innerHTML = '';
-            
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                
-                if (file.size > 2 * 1024 * 1024) {
-                    alert('❌ Ảnh quá lớn! Tối đa 2MB');
-                    input.value = '';
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.innerHTML = `
-                        <div class="mt-3 text-center">
-                            <img src="${e.target.result}" class="image-preview" alt="Preview">
-                            <div class="mt-2">
-                                <small class="text-muted d-block">${file.name}</small>
-                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMainImage()">
-                                    <i class="fas fa-times"></i> Xóa
-                                </button>
+    <?php if ($success): ?>
+        <div class="alert alert-success">
+            <?php echo htmlspecialchars($success); ?>
+        </div>
+    <?php endif; ?>
+
+    <form method="POST" enctype="multipart/form-data" class="product-form" data-ajax="false">
+        <div class="row">
+            <!-- Left Column -->
+            <div class="col-8">
+                <!-- Basic Information -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Basic Information</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-group">
+                            <label class="form-label">Product Name *</label>
+                            <input type="text" name="name" class="form-control" 
+                                   value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" 
+                                   data-validation="required" required>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">SKU *</label>
+                                <input type="text" name="sku" class="form-control" 
+                                       value="<?php echo htmlspecialchars($_POST['sku'] ?? ''); ?>" 
+                                       data-validation="required" required>
+                                <small class="form-text text-muted">Unique product identifier</small>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Brand</label>
+                                <input type="text" name="brand" class="form-control" 
+                                       value="<?php echo htmlspecialchars($_POST['brand'] ?? ''); ?>">
                             </div>
                         </div>
-                    `;
-                };
-                reader.readAsDataURL(file);
-            }
-        }
 
-        function previewSubImages(input) {
-            const preview = document.getElementById('subImagesPreview');
-            preview.innerHTML = '';
-            
-            if (input.files) {
-                if (input.files.length > 5) {
-                    alert('❌ Tối đa 5 ảnh phụ!');
-                    return;
-                }
-                
-                Array.from(input.files).forEach((file, index) => {
-                    if (file.size > 2 * 1024 * 1024) {
-                        alert(`❌ Ảnh ${file.name} quá lớn!`);
-                        return;
-                    }
-                    
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const imageDiv = document.createElement('div');
-                        imageDiv.className = 'mt-2 text-center';
-                        imageDiv.innerHTML = `
-                            <img src="${e.target.result}" class="image-preview" alt="Preview">
-                            <div class="mt-1">
-                                <small class="text-muted d-block">${file.name}</small>
+                        <div class="form-group">
+                            <label class="form-label">Short Description</label>
+                            <textarea name="short_description" class="form-control" rows="3" 
+                                      maxlength="200"><?php echo htmlspecialchars($_POST['short_description'] ?? ''); ?></textarea>
+                            <small class="form-text text-muted">Brief product summary (max 200 characters)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Full Description *</label>
+                            <textarea name="description" class="form-control" rows="8" 
+                                      data-validation="required" required><?php echo htmlspecialchars($_POST['description'] ?? ''); ?></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pricing -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Pricing</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Regular Price *</label>
+                                <div class="input-group">
+                                    <input type="number" name="price" class="form-control" 
+                                           value="<?php echo $_POST['price'] ?? ''; ?>" 
+                                           step="0.01" min="0" data-validation="required numeric" required>
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">VND</span>
+                                    </div>
+                                </div>
                             </div>
-                        `;
-                        preview.appendChild(imageDiv);
-                    };
-                    reader.readAsDataURL(file);
-                });
-            }
-        }
+                            <div class="form-group">
+                                <label class="form-label">Sale Price</label>
+                                <div class="input-group">
+                                    <input type="number" name="sale_price" class="form-control" 
+                                           value="<?php echo $_POST['sale_price'] ?? ''; ?>" 
+                                           step="0.01" min="0">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">VND</span>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">Leave empty if no sale</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        function removeMainImage() {
-            document.getElementById('hinh_anh_chinh').value = '';
-            document.getElementById('mainImagePreview').innerHTML = '';
-        }
+                <!-- Inventory -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Inventory</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Stock Quantity *</label>
+                                <input type="number" name="quantity" class="form-control" 
+                                       value="<?php echo $_POST['quantity'] ?? '0'; ?>" 
+                                       min="0" data-validation="required numeric" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Minimum Quantity</label>
+                                <input type="number" name="min_quantity" class="form-control" 
+                                       value="<?php echo $_POST['min_quantity'] ?? '1'; ?>" 
+                                       min="1">
+                                <small class="form-text text-muted">Alert when stock is below this level</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        // Form validation
-        document.getElementById('productForm').addEventListener('submit', function(e) {
-            const requiredFields = ['ten_san_pham', 'thuong_hieu', 'danh_muc_id', 'gia_goc', 'mo_ta_ngan'];
-            let isValid = true;
-            
-            requiredFields.forEach(field => {
-                const input = document.querySelector(`[name="${field}"]`);
-                if (!input.value.trim()) {
-                    input.classList.add('is-invalid');
-                    isValid = false;
-                } else {
-                    input.classList.remove('is-invalid');
-                }
-            });
-            
-            if (!isValid) {
-                e.preventDefault();
-                alert('❌ Vui lòng điền đầy đủ thông tin bắt buộc!');
-                return;
+                <!-- Shipping -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Shipping Information</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Weight (kg)</label>
+                                <input type="number" name="weight" class="form-control" 
+                                       value="<?php echo $_POST['weight'] ?? ''; ?>" 
+                                       step="0.01" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Dimensions (L x W x H cm)</label>
+                                <input type="text" name="dimensions" class="form-control" 
+                                       value="<?php echo htmlspecialchars($_POST['dimensions'] ?? ''); ?>"
+                                       placeholder="e.g., 20 x 15 x 10">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Variants -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Product Variants</h3>
+                        <button type="button" class="btn btn-sm btn-primary" id="addVariant">
+                            <i class="fas fa-plus"></i> Add Variant
+                        </button>
+                    </div>
+                    <div class="admin-card-body">
+                        <div id="variantsContainer">
+                            <p class="text-muted">Click "Add Variant" to create product variations with different colors, sizes, or prices.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEO -->
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">SEO Settings</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-group">
+                            <label class="form-label">Meta Title</label>
+                            <input type="text" name="meta_title" class="form-control" 
+                                   value="<?php echo htmlspecialchars($_POST['meta_title'] ?? ''); ?>"
+                                   maxlength="60">
+                            <small class="form-text text-muted">Recommended: 50-60 characters</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Meta Description</label>
+                            <textarea name="meta_description" class="form-control" rows="3" 
+                                      maxlength="160"><?php echo htmlspecialchars($_POST['meta_description'] ?? ''); ?></textarea>
+                            <small class="form-text text-muted">Recommended: 150-160 characters</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Tags</label>
+                            <input type="text" name="tags" class="form-control" 
+                                   value="<?php echo htmlspecialchars($_POST['tags'] ?? ''); ?>"
+                                   placeholder="tag1, tag2, tag3">
+                            <small class="form-text text-muted">Separate tags with commas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-4">
+                <!-- Product Images -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Product Images</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-group">
+                            <label class="form-label">Main Image</label>
+                            <div class="image-upload-area">
+                                <input type="file" name="main_image" class="image-input" accept="image/*">
+                                <div class="image-preview"></div>
+                                <div class="upload-placeholder">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <p>Click to upload main product image</p>
+                                    <small>JPG, PNG, GIF, WEBP (Max: 5MB)</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Gallery Images</label>
+                            <div class="image-upload-area">
+                                <input type="file" name="gallery_images[]" class="image-input" 
+                                       accept="image/*" multiple>
+                                <div class="image-preview gallery-preview"></div>
+                                <div class="upload-placeholder">
+                                    <i class="fas fa-images"></i>
+                                    <p>Upload additional product images</p>
+                                    <small>Multiple files allowed</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category & Status -->
+                <div class="admin-card mb-30">
+                    <div class="admin-card-header">
+                        <h3 class="admin-card-title">Category & Status</h3>
+                    </div>
+                    <div class="admin-card-body">
+                        <div class="form-group">
+                            <label class="form-label">Category *</label>
+                            <select name="category_id" class="form-control" data-validation="required" required>
+                                <option value="">Select Category</option>
+                                <?php foreach ($categories as $category): ?>
+                                    <option value="<?php echo $category['id']; ?>" 
+                                            <?php echo (($_POST['category_id'] ?? '') == $category['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($category['name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="form-control">
+                                <option value="active" <?php echo (($_POST['status'] ?? 'active') === 'active') ? 'selected' : ''; ?>>
+                                    Active
+                                </option>
+                                <option value="inactive" <?php echo (($_POST['status'] ?? '') === 'inactive') ? 'selected' : ''; ?>>
+                                    Inactive
+                                </option>
+                                <option value="draft" <?php echo (($_POST['status'] ?? '') === 'draft') ? 'selected' : ''; ?>>
+                                    Draft
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-0">
+                            <div class="form-check">
+                                <input type="checkbox" name="featured" value="1" class="form-check-input" 
+                                       id="featured" <?php echo isset($_POST['featured']) ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="featured">
+                                    Featured Product
+                                </label>
+                                <small class="form-text text-muted">Show in featured products section</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="admin-card">
+                    <div class="admin-card-body">
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fas fa-save"></i> Add Product
+                        </button>
+                        <a href="index.php" class="btn btn-light btn-block mt-10">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Variant Template -->
+<div id="variantTemplate" style="display: none;">
+    <div class="variant-item border rounded p-20 mb-15">
+        <div class="d-flex justify-content-between align-items-center mb-15">
+            <h5>Product Variant</h5>
+            <button type="button" class="btn btn-sm btn-danger remove-variant">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Color</label>
+                <select name="variants[VARIANT_INDEX][color]" class="form-control">
+                    <option value="">Select Color</option>
+                    <?php foreach ($colors as $color): ?>
+                        <option value="<?php echo htmlspecialchars($color['name']); ?>">
+                            <?php echo htmlspecialchars($color['name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Size</label>
+                <select name="variants[VARIANT_INDEX][size]" class="form-control">
+                    <option value="">Select Size</option>
+                    <?php foreach ($sizes as $size): ?>
+                        <option value="<?php echo htmlspecialchars($size['name']); ?>">
+                            <?php echo htmlspecialchars($size['name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Price Adjustment</label>
+                <input type="number" name="variants[VARIANT_INDEX][price_adjustment]" 
+                       class="form-control" step="0.01" value="0">
+                <small class="form-text text-muted">Additional cost for this variant</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Stock Quantity</label>
+                <input type="number" name="variants[VARIANT_INDEX][quantity]" 
+                       class="form-control" min="0" value="0">
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.image-upload-area {
+    position: relative;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    transition: border-color 0.3s ease;
+    cursor: pointer;
+}
+
+.image-upload-area:hover {
+    border-color: #3498db;
+}
+
+.image-upload-area .image-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.image-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 6px;
+    margin: 5px;
+}
+
+.upload-placeholder {
+    color: #999;
+}
+
+.upload-placeholder i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    color: #ccc;
+}
+
+.variant-item {
+    background: #f8f9fa;
+}
+
+.gallery-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.gallery-preview img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+}
+</style>
+
+<script>
+$(document).ready(function() {
+    let variantIndex = 0;
+    
+    // Add variant functionality
+    $('#addVariant').on('click', function() {
+        const template = $('#variantTemplate').html();
+        const variantHtml = template.replace(/VARIANT_INDEX/g, variantIndex);
+        $('#variantsContainer').append(variantHtml);
+        variantIndex++;
+        
+        // Hide placeholder text
+        $('#variantsContainer p.text-muted').hide();
+    });
+    
+    // Remove variant functionality
+    $(document).on('click', '.remove-variant', function() {
+        $(this).closest('.variant-item').remove();
+        
+        // Show placeholder if no variants
+        if ($('.variant-item').length === 0) {
+            $('#variantsContainer p.text-muted').show();
+        }
+    });
+    
+    // Image preview functionality
+    $('.image-input').on('change', function() {
+        const files = this.files;
+        const preview = $(this).siblings('.image-preview');
+        const isGallery = $(this).attr('name').includes('gallery');
+        
+        preview.empty();
+        
+        if (files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const img = $('<img>').attr('src', e.target.result);
+                    preview.append(img);
+                };
+                
+                reader.readAsDataURL(file);
+                
+                // For single image upload, break after first
+                if (!isGallery) break;
             }
             
-            // Show loading
-            const submitBtn = this.querySelector('button[type="submit"]');
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lưu...';
-            submitBtn.disabled = true;
+            $(this).siblings('.upload-placeholder').hide();
+        } else {
+            $(this).siblings('.upload-placeholder').show();
+        }
+    });
+    
+    // Auto-generate SKU from product name
+    $('input[name="name"]').on('input', function() {
+        const name = $(this).val();
+        const sku = generateSKU(name);
+        $('input[name="sku"]').val(sku);
+    });
+    
+    function generateSKU(name) {
+        return name.toUpperCase()
+                  .replace(/[^A-Z0-9]/g, '')
+                  .substring(0, 8) + 
+               Math.random().toString(36).substr(2, 4).toUpperCase();
+    }
+    
+    // Form validation
+    $('form').on('submit', function(e) {
+        let isValid = true;
+        
+        // Check required fields
+        $(this).find('[data-validation*="required"]').each(function() {
+            if (!$(this).val().trim()) {
+                $(this).addClass('is-invalid');
+                isValid = false;
+            } else {
+                $(this).removeClass('is-invalid');
+            }
         });
-    </script>
-</body>
-</html>
+        
+        if (!isValid) {
+            e.preventDefault();
+            showAlert('error', 'Please fill in all required fields');
+        }
+    });
+});
+</script>
+
+<?php include '../layouts/footer.php'; ?>
+
+<?php
+/**
+ * Helper Functions
+ */
+
+function uploadProductImage($file) {
+    $upload_dir = "../../uploads/products/";
+    
+    // Create directory if not exists
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    
+    // Validate file
+    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $max_size = 5 * 1024 * 1024; // 5MB
+    
+    if (!in_array($file['type'], $allowed_types)) {
+        return ['success' => false, 'message' => 'Invalid image format. Please use JPG, PNG, GIF, or WEBP.'];
+    }
+    
+    if ($file['size'] > $max_size) {
+        return ['success' => false, 'message' => 'Image size too large. Maximum size is 5MB.'];
+    }
+    
+    // Generate unique filename
+    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $filename = 'product_' . uniqid() . '_' . time() . '.' . $extension;
+    $filepath = $upload_dir . $filename;
+    
+    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+        return ['success' => true, 'filename' => $filename];
+    } else {
+        return ['success' => false, 'message' => 'Failed to upload image.'];
+    }
+}
+
+function createSlug($string) {
+    $slug = strtolower(trim($string));
+    $slug = preg_replace('/[^a-z0-9-]/', '-', $slug);
+    $slug = preg_replace('/-+/', '-', $slug);
+    return trim($slug, '-');
+}
+
+function logAdminActivity($action, $details = '') {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO admin_activity_logs (admin_id, action, details, ip_address, user_agent, created_at) 
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $_SESSION['admin_id'],
+            $action,
+            $details,
+            $_SERVER['REMOTE_ADDR'] ?? '',
+            $_SERVER['HTTP_USER_AGENT'] ?? ''
+        ]);
+    } catch (Exception $e) {
+        error_log("Log activity error: " . $e->getMessage());
+    }
+}
+?>
