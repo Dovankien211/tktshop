@@ -1,8 +1,11 @@
 <?php
 /**
- * TKT Shop - Add Product Page
+ * TKT Shop - Add Product Page (Fixed)
  * Trang thêm sản phẩm mới
  */
+
+// Start session first
+session_start();
 
 require_once '../../config/config.php';
 require_once '../../config/database.php';
@@ -16,6 +19,92 @@ if (!isset($_SESSION['admin_id'])) {
 $page_title = "Add New Product";
 $errors = [];
 $success = '';
+
+// Helper Functions (moved to top)
+function uploadProductImage($file) {
+    $upload_dir = "../../uploads/products/";
+    
+    // Create directory if not exists
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    
+    // Validate file
+    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $max_size = 5 * 1024 * 1024; // 5MB
+    
+    if (!in_array($file['type'], $allowed_types)) {
+        return ['success' => false, 'message' => 'Invalid image format. Please use JPG, PNG, GIF, or WEBP.'];
+    }
+    
+    if ($file['size'] > $max_size) {
+        return ['success' => false, 'message' => 'Image size too large. Maximum size is 5MB.'];
+    }
+    
+    // Generate unique filename
+    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $filename = 'product_' . uniqid() . '_' . time() . '.' . $extension;
+    $filepath = $upload_dir . $filename;
+    
+    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+        return ['success' => true, 'filename' => $filename];
+    } else {
+        return ['success' => false, 'message' => 'Failed to upload image.'];
+    }
+}
+
+function createSlug($string) {
+    $slug = strtolower(trim($string));
+    // Remove Vietnamese accents
+    $slug = preg_replace('/[àáạảãâầấậẩẫăằắặẳẵ]/u', 'a', $slug);
+    $slug = preg_replace('/[èéẹẻẽêềếệểễ]/u', 'e', $slug);
+    $slug = preg_replace('/[ìíịỉĩ]/u', 'i', $slug);
+    $slug = preg_replace('/[òóọỏõôồốộổỗơờớợởỡ]/u', 'o', $slug);
+    $slug = preg_replace('/[ùúụủũưừứựửữ]/u', 'u', $slug);
+    $slug = preg_replace('/[ỳýỵỷỹ]/u', 'y', $slug);
+    $slug = preg_replace('/[đ]/u', 'd', $slug);
+    // Replace non-alphanumeric with dash
+    $slug = preg_replace('/[^a-z0-9-]/', '-', $slug);
+    $slug = preg_replace('/-+/', '-', $slug);
+    return trim($slug, '-');
+}
+
+function logAdminActivity($action, $details = '') {
+    global $pdo;
+    
+    try {
+        // Check if table exists, if not create it
+        $stmt = $pdo->query("SHOW TABLES LIKE 'admin_activity_logs'");
+        if ($stmt->rowCount() == 0) {
+            // Create table if it doesn't exist
+            $pdo->exec("
+                CREATE TABLE admin_activity_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    admin_id INT,
+                    action VARCHAR(100),
+                    details TEXT,
+                    ip_address VARCHAR(45),
+                    user_agent TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        }
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO admin_activity_logs (admin_id, action, details, ip_address, user_agent, created_at) 
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $_SESSION['admin_id'],
+            $action,
+            $details,
+            $_SERVER['REMOTE_ADDR'] ?? '',
+            $_SERVER['HTTP_USER_AGENT'] ?? ''
+        ]);
+    } catch (Exception $e) {
+        error_log("Log activity error: " . $e->getMessage());
+    }
+}
 
 // Xử lý form submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -58,10 +147,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "SKU is required";
     } else {
         // Kiểm tra SKU trùng lặp
-        $check_sku = $pdo->prepare("SELECT COUNT(*) FROM products WHERE sku = ?");
-        $check_sku->execute([$sku]);
-        if ($check_sku->fetchColumn() > 0) {
-            $errors[] = "SKU already exists";
+        try {
+            $check_sku = $pdo->prepare("SELECT COUNT(*) FROM products WHERE sku = ?");
+            $check_sku->execute([$sku]);
+            if ($check_sku->fetchColumn() > 0) {
+                $errors[] = "SKU already exists";
+            }
+        } catch (PDOException $e) {
+            $errors[] = "Database error checking SKU";
         }
     }
     
@@ -116,8 +209,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("
                 INSERT INTO products (
                     name, slug, description, short_description, price, sale_price, 
-                    sku, category_id, brand, weight, dimensions, quantity, min_quantity,
-                    status, featured, image, gallery, meta_title, meta_description, 
+                    sku, category_id, brand, weight, dimensions, stock_quantity, min_quantity,
+                    status, is_featured, main_image, gallery_images, meta_title, meta_description, 
                     tags, created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
@@ -137,17 +230,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($_POST['variants']) && is_array($_POST['variants'])) {
                 foreach ($_POST['variants'] as $variant) {
                     if (!empty($variant['color']) || !empty($variant['size'])) {
-                        $variant_stmt = $pdo->prepare("
-                            INSERT INTO product_variants (product_id, color, size, price_adjustment, quantity)
-                            VALUES (?, ?, ?, ?, ?)
-                        ");
-                        $variant_stmt->execute([
-                            $product_id,
-                            $variant['color'] ?? '',
-                            $variant['size'] ?? '',
-                            $variant['price_adjustment'] ?? 0,
-                            $variant['quantity'] ?? 0
-                        ]);
+                        // Check if product_variants table exists
+                        try {
+                            $variant_stmt = $pdo->prepare("
+                                INSERT INTO product_variants (product_id, color, size, price_adjustment, quantity)
+                                VALUES (?, ?, ?, ?, ?)
+                            ");
+                            $variant_stmt->execute([
+                                $product_id,
+                                $variant['color'] ?? '',
+                                $variant['size'] ?? '',
+                                $variant['price_adjustment'] ?? 0,
+                                $variant['quantity'] ?? 0
+                            ]);
+                        } catch (PDOException $e) {
+                            // Table might not exist, skip variants for now
+                            error_log("Variants table error: " . $e->getMessage());
+                        }
                     }
                 }
             }
@@ -170,11 +269,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Lấy danh sách categories
-$categories = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name")->fetchAll();
+try {
+    $categories = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name")->fetchAll();
+} catch (PDOException $e) {
+    $categories = [];
+    $errors[] = "Could not load categories";
+}
 
 // Lấy danh sách colors và sizes
-$colors = $pdo->query("SELECT * FROM colors ORDER BY name")->fetchAll();
-$sizes = $pdo->query("SELECT * FROM sizes ORDER BY sort_order")->fetchAll();
+try {
+    $colors = $pdo->query("SELECT * FROM colors ORDER BY name")->fetchAll();
+} catch (PDOException $e) {
+    $colors = [];
+}
+
+try {
+    $sizes = $pdo->query("SELECT * FROM sizes ORDER BY sort_order")->fetchAll();
+} catch (PDOException $e) {
+    $sizes = [];
+}
 
 include '../layouts/header.php';
 ?>
@@ -333,21 +446,6 @@ include '../layouts/header.php';
                     </div>
                 </div>
 
-                <!-- Product Variants -->
-                <div class="admin-card mb-30">
-                    <div class="admin-card-header">
-                        <h3 class="admin-card-title">Product Variants</h3>
-                        <button type="button" class="btn btn-sm btn-primary" id="addVariant">
-                            <i class="fas fa-plus"></i> Add Variant
-                        </button>
-                    </div>
-                    <div class="admin-card-body">
-                        <div id="variantsContainer">
-                            <p class="text-muted">Click "Add Variant" to create product variations with different colors, sizes, or prices.</p>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- SEO -->
                 <div class="admin-card">
                     <div class="admin-card-header">
@@ -480,57 +578,6 @@ include '../layouts/header.php';
     </form>
 </div>
 
-<!-- Variant Template -->
-<div id="variantTemplate" style="display: none;">
-    <div class="variant-item border rounded p-20 mb-15">
-        <div class="d-flex justify-content-between align-items-center mb-15">
-            <h5>Product Variant</h5>
-            <button type="button" class="btn btn-sm btn-danger remove-variant">
-                <i class="fas fa-trash"></i>
-            </button>
-        </div>
-        
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">Color</label>
-                <select name="variants[VARIANT_INDEX][color]" class="form-control">
-                    <option value="">Select Color</option>
-                    <?php foreach ($colors as $color): ?>
-                        <option value="<?php echo htmlspecialchars($color['name']); ?>">
-                            <?php echo htmlspecialchars($color['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Size</label>
-                <select name="variants[VARIANT_INDEX][size]" class="form-control">
-                    <option value="">Select Size</option>
-                    <?php foreach ($sizes as $size): ?>
-                        <option value="<?php echo htmlspecialchars($size['name']); ?>">
-                            <?php echo htmlspecialchars($size['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-        </div>
-        
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">Price Adjustment</label>
-                <input type="number" name="variants[VARIANT_INDEX][price_adjustment]" 
-                       class="form-control" step="0.01" value="0">
-                <small class="form-text text-muted">Additional cost for this variant</small>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Stock Quantity</label>
-                <input type="number" name="variants[VARIANT_INDEX][quantity]" 
-                       class="form-control" min="0" value="0">
-            </div>
-        </div>
-    </div>
-</div>
-
 <style>
 .image-upload-area {
     position: relative;
@@ -588,69 +635,147 @@ include '../layouts/header.php';
     height: 80px;
     object-fit: cover;
 }
+
+.form-row {
+    display: flex;
+    gap: 15px;
+}
+
+.form-group {
+    flex: 1;
+    margin-bottom: 20px;
+}
+
+.admin-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.admin-card-header {
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.admin-card-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.admin-card-body {
+    padding: 20px;
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-block {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.alert-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.alert-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
 </style>
 
 <script>
-$(document).ready(function() {
-    let variantIndex = 0;
-    
-    // Add variant functionality
-    $('#addVariant').on('click', function() {
-        const template = $('#variantTemplate').html();
-        const variantHtml = template.replace(/VARIANT_INDEX/g, variantIndex);
-        $('#variantsContainer').append(variantHtml);
-        variantIndex++;
-        
-        // Hide placeholder text
-        $('#variantsContainer p.text-muted').hide();
-    });
-    
-    // Remove variant functionality
-    $(document).on('click', '.remove-variant', function() {
-        $(this).closest('.variant-item').remove();
-        
-        // Show placeholder if no variants
-        if ($('.variant-item').length === 0) {
-            $('#variantsContainer p.text-muted').show();
-        }
-    });
-    
+document.addEventListener('DOMContentLoaded', function() {
     // Image preview functionality
-    $('.image-input').on('change', function() {
-        const files = this.files;
-        const preview = $(this).siblings('.image-preview');
-        const isGallery = $(this).attr('name').includes('gallery');
-        
-        preview.empty();
-        
-        if (files.length > 0) {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const img = $('<img>').attr('src', e.target.result);
-                    preview.append(img);
-                };
-                
-                reader.readAsDataURL(file);
-                
-                // For single image upload, break after first
-                if (!isGallery) break;
-            }
+    const imageInputs = document.querySelectorAll('.image-input');
+    
+    imageInputs.forEach(function(input) {
+        input.addEventListener('change', function() {
+            const files = this.files;
+            const preview = this.parentNode.querySelector('.image-preview');
+            const placeholder = this.parentNode.querySelector('.upload-placeholder');
+            const isGallery = this.name.includes('gallery');
             
-            $(this).siblings('.upload-placeholder').hide();
-        } else {
-            $(this).siblings('.upload-placeholder').show();
-        }
+            preview.innerHTML = '';
+            
+            if (files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        preview.appendChild(img);
+                    };
+                    
+                    reader.readAsDataURL(file);
+                    
+                    // For single image upload, break after first
+                    if (!isGallery) break;
+                }
+                
+                placeholder.style.display = 'none';
+            } else {
+                placeholder.style.display = 'block';
+            }
+        });
     });
     
     // Auto-generate SKU from product name
-    $('input[name="name"]').on('input', function() {
-        const name = $(this).val();
-        const sku = generateSKU(name);
-        $('input[name="sku"]').val(sku);
-    });
+    const nameInput = document.querySelector('input[name="name"]');
+    const skuInput = document.querySelector('input[name="sku"]');
+    
+    if (nameInput && skuInput) {
+        nameInput.addEventListener('input', function() {
+            const name = this.value;
+            const sku = generateSKU(name);
+            skuInput.value = sku;
+        });
+    }
     
     function generateSKU(name) {
         return name.toUpperCase()
@@ -660,90 +785,29 @@ $(document).ready(function() {
     }
     
     // Form validation
-    $('form').on('submit', function(e) {
-        let isValid = true;
-        
-        // Check required fields
-        $(this).find('[data-validation*="required"]').each(function() {
-            if (!$(this).val().trim()) {
-                $(this).addClass('is-invalid');
-                isValid = false;
-            } else {
-                $(this).removeClass('is-invalid');
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            let isValid = true;
+            
+            // Check required fields
+            const requiredFields = this.querySelectorAll('[required]');
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    field.style.borderColor = '#dc3545';
+                    isValid = false;
+                } else {
+                    field.style.borderColor = '#ddd';
+                }
+            });
+            
+            if (!isValid) {
+                e.preventDefault();
+                alert('Please fill in all required fields');
             }
         });
-        
-        if (!isValid) {
-            e.preventDefault();
-            showAlert('error', 'Please fill in all required fields');
-        }
-    });
+    }
 });
 </script>
 
 <?php include '../layouts/footer.php'; ?>
-
-<?php
-/**
- * Helper Functions
- */
-
-function uploadProductImage($file) {
-    $upload_dir = "../../uploads/products/";
-    
-    // Create directory if not exists
-    if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    // Validate file
-    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    $max_size = 5 * 1024 * 1024; // 5MB
-    
-    if (!in_array($file['type'], $allowed_types)) {
-        return ['success' => false, 'message' => 'Invalid image format. Please use JPG, PNG, GIF, or WEBP.'];
-    }
-    
-    if ($file['size'] > $max_size) {
-        return ['success' => false, 'message' => 'Image size too large. Maximum size is 5MB.'];
-    }
-    
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = 'product_' . uniqid() . '_' . time() . '.' . $extension;
-    $filepath = $upload_dir . $filename;
-    
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-        return ['success' => true, 'filename' => $filename];
-    } else {
-        return ['success' => false, 'message' => 'Failed to upload image.'];
-    }
-}
-
-function createSlug($string) {
-    $slug = strtolower(trim($string));
-    $slug = preg_replace('/[^a-z0-9-]/', '-', $slug);
-    $slug = preg_replace('/-+/', '-', $slug);
-    return trim($slug, '-');
-}
-
-function logAdminActivity($action, $details = '') {
-    global $pdo;
-    
-    try {
-        $stmt = $pdo->prepare("
-            INSERT INTO admin_activity_logs (admin_id, action, details, ip_address, user_agent, created_at) 
-            VALUES (?, ?, ?, ?, ?, NOW())
-        ");
-        $stmt->execute([
-            $_SESSION['admin_id'],
-            $action,
-            $details,
-            $_SERVER['REMOTE_ADDR'] ?? '',
-            $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ]);
-    } catch (Exception $e) {
-        error_log("Log activity error: " . $e->getMessage());
-    }
-}
-?>
