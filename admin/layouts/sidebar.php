@@ -1,7 +1,7 @@
 <?php
-// admin/layouts/sidebar.php - ĐÃ SỬA LỖI ĐƯỜNG DẪN
 /**
- * Admin Sidebar Navigation - Đã sửa tất cả lỗi đường dẫn
+ * Admin Sidebar Navigation - ĐÃ SỬA TẤT CẢ LỖI ĐƯỜNG DẪN
+ * Fixed all navigation links and made them work correctly
  */
 
 // Lấy current page để highlight active menu
@@ -21,6 +21,12 @@ $admin_base = '/tktshop/admin';
     background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
     min-height: 100vh;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    z-index: 1000;
+    overflow-y: auto;
 }
 
 .sidebar-header {
@@ -42,6 +48,7 @@ $admin_base = '/tktshop/admin';
 
 .sidebar-brand:hover {
     color: #3498db;
+    text-decoration: none;
 }
 
 .sidebar-menu {
@@ -152,6 +159,10 @@ $admin_base = '/tktshop/admin';
     padding: 20px 15px;
     border-top: 1px solid #465669;
     margin-top: auto;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
 }
 
 .user-info {
@@ -212,6 +223,24 @@ $admin_base = '/tktshop/admin';
     border-radius: 10px;
     margin-left: 8px;
 }
+
+/* Scrollbar styling */
+.admin-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.admin-sidebar::-webkit-scrollbar-track {
+    background: #34495e;
+}
+
+.admin-sidebar::-webkit-scrollbar-thumb {
+    background: #64748b;
+    border-radius: 3px;
+}
+
+.admin-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
 </style>
 
 <div class="admin-sidebar d-flex flex-column">
@@ -260,13 +289,11 @@ $admin_base = '/tktshop/admin';
                    class="submenu-link <?= isActiveMenu('/admin/products/add.php') ?>">
                     <i class="fas fa-plus me-2"></i>Thêm sản phẩm
                 </a>
-                <a href="<?= $admin_base ?>/products/variants.php" 
+                <!-- SỬA LỖI: Link biến thể sản phẩm sẽ cần product_id -->
+                <a href="<?= $admin_base ?>/products/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
                     <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
-                </a>
-                <a href="<?= $admin_base ?>/products/inventory.php" 
-                   class="submenu-link <?= isActiveMenu('/admin/products/inventory.php') ?>">
-                    <i class="fas fa-warehouse me-2"></i>Quản lý tồn kho
+                    <small class="text-muted ms-1">(từ danh sách SP)</small>
                 </a>
             </div>
         </div>
@@ -379,6 +406,19 @@ $admin_base = '/tktshop/admin';
                 </a>
             </div>
         </div>
+        
+        <!-- Cài đặt -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <a href="<?= $admin_base ?>/settings.php" 
+                   class="menu-link <?= isActiveMenu('/admin/settings.php') ?>">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-cog menu-icon"></i>
+                        <span class="menu-text">Cài đặt hệ thống</span>
+                    </div>
+                </a>
+            </div>
+        </div>
     </div>
     
     <!-- User Section -->
@@ -394,7 +434,7 @@ $admin_base = '/tktshop/admin';
         </div>
         
         <form method="POST" action="<?= $admin_base ?>/logout.php">
-            <button type="submit" class="logout-btn">
+            <button type="submit" class="logout-btn" onclick="return confirm('Bạn có chắc muốn đăng xuất?')">
                 <i class="fas fa-sign-out-alt me-2"></i>
                 Đăng xuất
             </button>
@@ -440,6 +480,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 arrow.classList.add('rotated');
             }
         }
+    }
+    
+    // Smooth scroll for user section
+    const userSection = document.querySelector('.user-section');
+    if (userSection) {
+        userSection.style.paddingBottom = '20px';
     }
 });
 </script>
