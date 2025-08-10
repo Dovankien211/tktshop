@@ -115,10 +115,82 @@ $product = null;
 $variants = [];
 $reviews = [];
 $related_products = [];
+$product_table = '';
 
-// 🔧 LOGIC MỚI: Kiểm tra bảng nào có dữ liệu
-if ($id > 0) {
-    // TRY BẢNG PRODUCTS TRƯỚC (vì admin đang thêm vào đây)
+// 🔧 LOGIC MỚI: Ưu tiên kiểm tra slug trước (vì link từ products.php dùng slug)
+if ($slug) {
+    // TRY BẢNG PRODUCTS BẰNG SLUG TRƯỚC
+    try {
+        $stmt = $pdo->prepare("
+            SELECT p.*, c.name as category_name,
+                   COALESCE(p.sale_price, p.price) as gia_hien_tai,
+                   CASE 
+                       WHEN p.sale_price IS NOT NULL AND p.sale_price < p.price 
+                       THEN ROUND(((p.price - p.sale_price) / p.price) * 100, 0)
+                       ELSE 0
+                   END as phan_tram_giam,
+                   p.name as ten_san_pham,
+                   p.description as mo_ta_ngan,
+                   p.description as mo_ta_chi_tiet,
+                   p.price as gia_goc,
+                   p.sale_price as gia_khuyen_mai,
+                   p.main_image as hinh_anh_chinh,
+                   p.gallery_images as album_hinh_anh,
+                   p.brand as thuong_hieu,
+                   p.category_id as danh_muc_id,
+                   p.is_featured as san_pham_noi_bat,
+                   0 as san_pham_moi,
+                   0 as san_pham_ban_chay,
+                   0 as luot_xem,
+                   0 as so_luong_ban,
+                   0 as diem_danh_gia_tb,
+                   0 as so_luong_danh_gia,
+                   c.name as ten_danh_muc,
+                   c.slug as danh_muc_slug
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.slug = ? AND p.status = 'active'
+        ");
+        $stmt->execute([$slug]);
+        $product = $stmt->fetch();
+        
+        if ($product) {
+            $product_table = 'products';
+        }
+    } catch (Exception $e) {
+        error_log("Error querying products table by slug: " . $e->getMessage());
+    }
+    
+    // Nếu không tìm thấy trong products, thử san_pham_chinh
+    if (!$product) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
+                       COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                       CASE 
+                           WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+                           THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
+                           ELSE 0
+                       END as phan_tram_giam
+                FROM san_pham_chinh sp
+                LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+                WHERE sp.slug = ? AND sp.trang_thai = 'hoat_dong'
+            ");
+            $stmt->execute([$slug]);
+            $product = $stmt->fetch();
+            
+            if ($product) {
+                $product_table = 'san_pham_chinh';
+            }
+        } catch (Exception $e) {
+            error_log("Error querying san_pham_chinh table by slug: " . $e->getMessage());
+        }
+    }
+}
+
+// Fallback: Nếu có ID và chưa tìm thấy sản phẩm
+if (!$product && $id > 0) {
+    // TRY BẢNG PRODUCTS BẰNG ID
     try {
         $stmt = $pdo->prepare("
             SELECT p.*, c.name as category_name,
@@ -153,108 +225,37 @@ if ($id > 0) {
         $stmt->execute([$id]);
         $product = $stmt->fetch();
         
-        // Nếu tìm thấy trong bảng products
         if ($product) {
             $product_table = 'products';
-            
-            // Cập nhật lượt xem (optional)
-            try {
-                $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity WHERE id = ?")->execute([$id]);
-            } catch (Exception $e) {
-                // Ignore view count update errors
-            }
-            
-            // Không có biến thể cho bảng products
-            $variants = [];
-            $sizes = [];
-            $colors = [];
-            $variant_matrix = [];
-            
-            // Reviews (giả lập)
-            $reviews = [];
-            $rating_stats = [];
-            
-            // Sản phẩm liên quan từ bảng products
-            $stmt = $pdo->prepare("
-                SELECT p.*, c.name as category_name,
-                       p.name as ten_san_pham,
-                       p.main_image as hinh_anh_chinh,
-                       p.price as gia_goc,
-                       p.sale_price as gia_khuyen_mai,
-                       0 as diem_danh_gia_tb,
-                       0 as so_luong_danh_gia,
-                       p.stock_quantity as tong_ton_kho
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                WHERE p.category_id = ? AND p.id != ? AND p.status = 'active' AND p.stock_quantity > 0
-                ORDER BY p.created_at DESC
-                LIMIT 4
-            ");
-            $stmt->execute([$product['danh_muc_id'], $id]);
-            $related_products = $stmt->fetchAll();
         }
     } catch (Exception $e) {
-        error_log("Error querying products table: " . $e->getMessage());
+        error_log("Error querying products table by ID: " . $e->getMessage());
     }
-}
-
-// Nếu không tìm thấy trong products, thử san_pham_chinh
-if (!$product && $slug) {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
-                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
-                   CASE 
-                       WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
-                       THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
-                       ELSE 0
-                   END as phan_tram_giam
-            FROM san_pham_chinh sp
-            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
-            WHERE sp.slug = ? AND sp.trang_thai = 'hoat_dong'
-        ");
-        $stmt->execute([$slug]);
-        $product = $stmt->fetch();
-        
-        if ($product) {
-            $product_table = 'san_pham_chinh';
-            
-            // Cập nhật lượt xem
-            $pdo->prepare("UPDATE san_pham_chinh SET luot_xem = luot_xem + 1 WHERE id = ?")->execute([$product['id']]);
-            
-            // Lấy biến thể sản phẩm
+    
+    // Nếu không tìm thấy trong products, thử san_pham_chinh
+    if (!$product) {
+        try {
             $stmt = $pdo->prepare("
-                SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
-                FROM bien_the_san_pham bsp
-                JOIN kich_co kc ON bsp.kich_co_id = kc.id
-                JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
-                WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
-                ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
+                SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
+                       COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                       CASE 
+                           WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+                           THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
+                           ELSE 0
+                       END as phan_tram_giam
+                FROM san_pham_chinh sp
+                LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+                WHERE sp.id = ? AND sp.trang_thai = 'hoat_dong'
             ");
-            $stmt->execute([$product['id']]);
-            $variants = $stmt->fetchAll();
+            $stmt->execute([$id]);
+            $product = $stmt->fetch();
             
-            // Nhóm biến thể theo size và màu
-            $sizes = [];
-            $colors = [];
-            $variant_matrix = [];
-            
-            foreach ($variants as $variant) {
-                if (!in_array($variant['kich_co'], $sizes)) {
-                    $sizes[] = $variant['kich_co'];
-                }
-                if (!isset($colors[$variant['mau_sac_id']])) {
-                    $colors[$variant['mau_sac_id']] = [
-                        'id' => $variant['mau_sac_id'],
-                        'ten_mau' => $variant['ten_mau'],
-                        'ma_mau' => $variant['ma_mau']
-                    ];
-                }
-                $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
+            if ($product) {
+                $product_table = 'san_pham_chinh';
             }
+        } catch (Exception $e) {
+            error_log("Error querying san_pham_chinh table by ID: " . $e->getMessage());
         }
-    } catch (Exception $e) {
-        error_log("Error querying san_pham_chinh table: " . $e->getMessage());
     }
 }
 
@@ -262,6 +263,89 @@ if (!$product && $slug) {
 if (!$product) {
     header('Location: products.php?error=product_not_found');
     exit;
+}
+
+// ✅ Xử lý tiếp theo dựa trên product_table
+if ($product_table == 'products') {
+    // Logic cho bảng products
+    try {
+        // Cập nhật lượt xem (optional)
+        $pdo->prepare("UPDATE products SET view_count = view_count + 1 WHERE id = ?")->execute([$product['id']]);
+    } catch (Exception $e) {
+        // Ignore view count update errors
+    }
+    
+    // Không có biến thể cho bảng products
+    $variants = [];
+    $sizes = [];
+    $colors = [];
+    $variant_matrix = [];
+    
+    // Reviews (giả lập)
+    $reviews = [];
+    $rating_stats = [];
+    
+    // Sản phẩm liên quan từ bảng products
+    $stmt = $pdo->prepare("
+        SELECT p.*, c.name as category_name,
+               p.name as ten_san_pham,
+               p.main_image as hinh_anh_chinh,
+               p.price as gia_goc,
+               p.sale_price as gia_khuyen_mai,
+               0 as diem_danh_gia_tb,
+               0 as so_luong_danh_gia,
+               p.stock_quantity as tong_ton_kho
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.category_id = ? AND p.id != ? AND p.status = 'active' AND p.stock_quantity > 0
+        ORDER BY p.created_at DESC
+        LIMIT 4
+    ");
+    $stmt->execute([$product['danh_muc_id'], $product['id']]);
+    $related_products = $stmt->fetchAll();
+    
+} else { // san_pham_chinh
+    // Logic cho bảng san_pham_chinh
+    try {
+        // Cập nhật lượt xem
+        $pdo->prepare("UPDATE san_pham_chinh SET luot_xem = luot_xem + 1 WHERE id = ?")->execute([$product['id']]);
+    } catch (Exception $e) {
+        // Ignore view count update errors  
+    }
+    
+    // Lấy biến thể sản phẩm
+    $stmt = $pdo->prepare("
+        SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
+        FROM bien_the_san_pham bsp
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
+        ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
+    ");
+    $stmt->execute([$product['id']]);
+    $variants = $stmt->fetchAll();
+    
+    // Nhóm biến thể theo size và màu
+    $sizes = [];
+    $colors = [];
+    $variant_matrix = [];
+    
+    foreach ($variants as $variant) {
+        if (!in_array($variant['kich_co'], $sizes)) {
+            $sizes[] = $variant['kich_co'];
+        }
+        if (!isset($colors[$variant['mau_sac_id']])) {
+            $colors[$variant['mau_sac_id']] = [
+                'id' => $variant['mau_sac_id'],
+                'ten_mau' => $variant['ten_mau'],
+                'ma_mau' => $variant['ma_mau']
+            ];
+        }
+        $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
+    }
+    
+    // Sản phẩm liên quan từ bảng san_pham_chinh (nếu cần)
+    $related_products = [];
 }
 
 // Album ảnh

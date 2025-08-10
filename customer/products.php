@@ -445,16 +445,20 @@ function displayStars($rating) {
                                             <span class="badge bg-success position-absolute" style="top: 10px; left: 10px; z-index: 1;">Nổi bật</span>
                                         <?php endif; ?>
                                         
-                                        <img src="<?= !empty($product['main_image']) ? '/tktshop/uploads/products/' . htmlspecialchars($product['main_image']) : '/tktshop/uploads/products/no-image.jpg' ?>" 
-                                             class="card-img-top product-image" 
-                                             alt="<?= htmlspecialchars($product['name']) ?>"
-                                             loading="lazy"
-                                             onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
+                                        <!-- ✅ FIX: Link ảnh dùng slug -->
+                                        <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>">
+                                            <img src="<?= !empty($product['main_image']) ? '/tktshop/uploads/products/' . htmlspecialchars($product['main_image']) : '/tktshop/uploads/products/no-image.jpg' ?>" 
+                                                 class="card-img-top product-image" 
+                                                 alt="<?= htmlspecialchars($product['name']) ?>"
+                                                 loading="lazy"
+                                                 onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
+                                        </a>
                                     </div>
                                     
                                     <div class="card-body">
                                         <h6 class="card-title mb-2">
-                                            <a href="product_detail.php?id=<?= $product['id'] ?>" 
+                                            <!-- ✅ FIX: Link title dùng slug thay vì id -->
+                                            <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" 
                                                class="text-decoration-none text-dark">
                                                 <?= htmlspecialchars($product['name']) ?>
                                             </a>
@@ -504,6 +508,7 @@ function displayStars($rating) {
                                         
                                         <!-- Actions -->
                                         <div class="mt-3 d-grid gap-2">
+                                            <!-- ✅ FIX: Button dùng slug -->
                                             <a href="product_detail.php?slug=<?= htmlspecialchars($product['slug']) ?>" class="btn btn-primary btn-sm">
                                                 <i class="fas fa-eye"></i> Xem chi tiết
                                             </a>
