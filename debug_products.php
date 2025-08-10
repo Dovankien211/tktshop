@@ -4,8 +4,57 @@
  */
 
 session_start();
-require_once '../config/database.php';
-require_once '../config/config.php';
+
+// Tìm file config với nhiều đường dẫn có thể
+$config_paths = [
+    'config/database.php',
+    'config/config.php', 
+    'admin/config/database.php',
+    'admin/config/config.php'
+];
+
+$pdo = null;
+$config_found = false;
+
+foreach ($config_paths as $path) {
+    if (file_exists($path)) {
+        try {
+            require_once $path;
+            $config_found = true;
+            echo "<div style='color: green;'>✅ Tìm thấy config: $path</div>";
+            break;
+        } catch (Exception $e) {
+            echo "<div style='color: orange;'>⚠️ Lỗi load config $path: " . $e->getMessage() . "</div>";
+        }
+    }
+}
+
+if (!$config_found) {
+    // Tạo kết nối database trực tiếp
+    echo "<div style='color: orange;'>⚠️ Không tìm thấy file config, tạo kết nối trực tiếp...</div>";
+    
+    // Thông tin database mặc định (có thể thay đổi)
+    $host = 'localhost';
+    $dbname = 'tktshop';
+    $username = 'root';
+    $password = '';
+    
+    try {
+        $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        echo "<div style='color: green;'>✅ Kết nối database thành công!</div>";
+    } catch (PDOException $e) {
+        echo "<div style='color: red;'>❌ Lỗi kết nối database: " . $e->getMessage() . "</div>";
+        echo "<div style='background: #f8f9fa; padding: 10px; margin: 10px 0;'>";
+        echo "<strong>Hướng dẫn khắc phục:</strong><br>";
+        echo "1. Kiểm tra MySQL đã chạy chưa<br>";
+        echo "2. Kiểm tra tên database 'tktshop' đã tồn tại chưa<br>";
+        echo "3. Kiểm tra username/password MySQL<br>";
+        echo "4. Chỉnh sửa thông tin database ở dòng 25-28 trong file debug này";
+        echo "</div>";
+        exit;
+    }
+}
 
 echo "<h2>🔍 DEBUG: Kiểm tra sản phẩm customer</h2>";
 echo "<style>
