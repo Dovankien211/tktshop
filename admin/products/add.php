@@ -207,11 +207,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim($_POST['description'] ?? '');
     $short_description = trim($_POST['short_description'] ?? '');
     $price = $_POST['price'] ?? 0;
-    $sale_price = $_POST['sale_price'] ?? null;
+    $sale_price = !empty($_POST['sale_price']) ? $_POST['sale_price'] : null;
     $sku = trim($_POST['sku'] ?? '');
     $category_id = $_POST['category_id'] ?? 0;
     $brand = trim($_POST['brand'] ?? '');
-    $weight = $_POST['weight'] ?? 0;
+    $weight = !empty($_POST['weight']) ? (float)$_POST['weight'] : 0;
     $dimensions = trim($_POST['dimensions'] ?? '');
     $quantity = $_POST['quantity'] ?? 0;
     $min_quantity = $_POST['min_quantity'] ?? 1;
@@ -221,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $meta_description = trim($_POST['meta_description'] ?? '');
     $tags = trim($_POST['tags'] ?? '');
     
-    // Validation
+    // Validation với xử lý kiểu dữ liệu tốt hơn
     if (empty($name)) {
         $errors[] = "Tên sản phẩm là bắt buộc";
     }
@@ -230,12 +230,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Mô tả sản phẩm là bắt buộc";
     }
     
-    if (!is_numeric($price) || $price <= 0) {
-        $errors[] = "Giá sản phẩm phải là số dương";
+    // Xử lý price
+    $price = !empty($_POST['price']) ? (float)$_POST['price'] : 0;
+    if ($price <= 0) {
+        $errors[] = "Giá sản phẩm phải lớn hơn 0";
     }
     
-    if (!empty($sale_price) && (!is_numeric($sale_price) || $sale_price >= $price)) {
-        $errors[] = "Giá khuyến mãi phải nhỏ hơn giá gốc";
+    // Xử lý sale_price
+    if (!empty($_POST['sale_price'])) {
+        $sale_price = (float)$_POST['sale_price'];
+        if ($sale_price >= $price) {
+            $errors[] = "Giá khuyến mãi phải nhỏ hơn giá gốc";
+        }
+    } else {
+        $sale_price = null;
     }
     
     if (empty($sku)) {
@@ -257,9 +265,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Vui lòng chọn danh mục";
     }
     
-    if (!is_numeric($quantity) || $quantity < 0) {
-        $errors[] = "Số lượng phải là số không âm";
+    // Xử lý quantity
+    $quantity = !empty($_POST['quantity']) ? (int)$_POST['quantity'] : 0;
+    if ($quantity < 0) {
+        $errors[] = "Số lượng không được âm";
     }
+    
+    // Xử lý min_quantity
+    $min_quantity = !empty($_POST['min_quantity']) ? (int)$_POST['min_quantity'] : 1;
     
     // Xử lý upload ảnh chính
     $main_image = '';
