@@ -9,7 +9,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../config/config.php';
 
-// 🔧 REUSE: Database schema detection from products.php
+// 🔧 COMPLETE: Database schema detection function
 function detectDatabaseSchema($pdo) {
     $schema = [
         'table' => null,
@@ -77,6 +77,25 @@ function detectDatabaseSchema($pdo) {
                 'category_slug' => 'slug',
                 'stock_quantity' => 'stock_quantity'
             ];
+        }
+        
+        // Add missing slug column if needed
+        try {
+            $stmt = $pdo->query("SHOW COLUMNS FROM {$schema['table']} LIKE 'slug'");
+            if ($stmt->rowCount() == 0) {
+                $pdo->exec("ALTER TABLE {$schema['table']} ADD COLUMN slug VARCHAR(255) NULL AFTER {$schema['fields']['name']}");
+                
+                // Generate slugs for existing records
+                $stmt = $pdo->query("SELECT id, {$schema['fields']['name']} FROM {$schema['table']} WHERE slug IS NULL OR slug = ''");
+                $update_stmt = $pdo->prepare("UPDATE {$schema['table']} SET slug = ? WHERE id = ?");
+                
+                while ($row = $stmt->fetch()) {
+                    $slug = createSlug($row[$schema['fields']['name']]);
+                    $update_stmt->execute([$slug, $row['id']]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Could not add/update slug column: " . $e->getMessage());
         }
         
     } catch (Exception $e) {
@@ -401,6 +420,15 @@ function getImageUrl($imageName) {
     return "/tktshop/uploads/products/" . htmlspecialchars($imageName);
 }
 
+function getCurrentUrl() {
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+    return $protocol . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+}
+
+function formatPrice($price) {
+    return number_format($price, 0, ',', '.') . '₫';
+}
+
 $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
 ?>
 
@@ -414,6 +442,7 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css" rel="stylesheet">
     
     <style>
         .product-gallery {
@@ -705,6 +734,64 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             localStorage.setItem('recentlyViewed', JSON.stringify(recentProducts));
         }
         
+        // Display recently viewed products
+        function displayRecentlyViewed() {
+            const recentProducts = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+            const currentProductId = <?= $product['id'] ?>;
+            
+            // Filter out current product
+            const filteredProducts = recentProducts.filter(p => p.id != currentProductId);
+            
+            if (filteredProducts.length > 0) {
+                const container = document.getElementById('recentlyViewedContainer');
+                const section = document.getElementById('recentlyViewedSection');
+                
+                let html = '';
+                filteredProducts.slice(0, 4).forEach(product => {
+                    html += `
+                        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                            <div class="card h-100">
+                                <img src="/tktshop/uploads/products/${product.image || 'no-image.jpg'}" 
+                                     class="card-img-top" 
+                                     alt="${product.name}"
+                                     style="height: 150px; object-fit: cover;"
+                                     onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <a href="product_detail.php?id=${product.id}" class="text-decoration-none text-dark">
+                                            ${product.name}
+                                        </a>
+                                    </h6>
+                                    <div class="fw-bold text-primary">${formatPrice(product.price)}</div>
+                                    <small class="text-muted">Đã xem ${timeAgo(product.viewedAt)}</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+                section.style.display = 'block';
+            }
+        }
+        
+        // Time ago helper
+        function timeAgo(dateString) {
+            const now = new Date();
+            const past = new Date(dateString);
+            const diffInSeconds = Math.floor((now - past) / 1000);
+            
+            if (diffInSeconds < 60) return 'vừa xong';
+            if (diffInSeconds < 3600) return Math.floor(diffInSeconds / 60) + ' phút trước';
+            if (diffInSeconds < 86400) return Math.floor(diffInSeconds / 3600) + ' giờ trước';
+            return Math.floor(diffInSeconds / 86400) + ' ngày trước';
+        }
+        
+        // Format price helper
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN').format(price) + '₫';
+        }
+        
         // Initialize all features
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🔧 TKT Shop Product Detail - Universal Handler loaded');
@@ -719,6 +806,7 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             initImageZoom();
             validateQuantity();
             updateCompareButton();
+            displayRecentlyViewed();
             
             // Add to recently viewed
             addToRecentlyViewed(
@@ -1027,6 +1115,26 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                             <button type="button" class="btn btn-outline-danger btn-lg" onclick="addToWishlist(<?= $product['id'] ?>)">
                                 <i class="fas fa-heart"></i>
                             </button>
+                            <button type="button" class="btn btn-outline-info btn-lg" id="compareBtn" onclick="addToCompare(<?= $product['id'] ?>)">
+                                <i class="fas fa-balance-scale"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Social Sharing -->
+                        <div class="mt-3">
+                            <small class="text-muted me-2">Chia sẻ:</small>
+                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="shareProduct('facebook')">
+                                <i class="fab fa-facebook-f"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info me-1" onclick="shareProduct('twitter')">
+                                <i class="fab fa-twitter"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger me-1" onclick="shareProduct('pinterest')">
+                                <i class="fab fa-pinterest"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="shareProduct('copy')">
+                                <i class="fas fa-link"></i>
+                            </button>
                         </div>
                     </form>
                     
@@ -1216,6 +1324,16 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 </div>
             </div>
         <?php endif; ?>
+        
+        <!-- Recently Viewed Products Section -->
+        <div class="row mt-5" id="recentlyViewedSection" style="display: none;">
+            <div class="col-12">
+                <h3 class="mb-4">Sản phẩm đã xem</h3>
+                <div class="row" id="recentlyViewedContainer">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Scripts -->
