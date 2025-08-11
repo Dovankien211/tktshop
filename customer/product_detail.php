@@ -573,7 +573,139 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             showToast('Tính năng yêu thích sẽ được cập nhật sớm!', 'info');
         }
         
-        // Initialize
+        // Image zoom functionality
+        function initImageZoom() {
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.addEventListener('click', function() {
+                    const modal = document.createElement('div');
+                    modal.className = 'modal fade';
+                    modal.innerHTML = `
+                        <div class="modal-dialog modal-lg modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Xem ảnh chi tiết</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <img src="${this.src}" class="img-fluid" alt="Product Image">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(modal);
+                    const bootstrapModal = new bootstrap.Modal(modal);
+                    bootstrapModal.show();
+                    
+                    modal.addEventListener('hidden.bs.modal', function() {
+                        modal.remove();
+                    });
+                });
+            }
+        }
+        
+        // Quantity validation
+        function validateQuantity() {
+            const quantityInput = document.getElementById('quantity');
+            if (quantityInput) {
+                quantityInput.addEventListener('change', function() {
+                    const value = parseInt(this.value);
+                    const min = parseInt(this.min) || 1;
+                    const max = parseInt(this.max) || 999;
+                    
+                    if (value < min) {
+                        this.value = min;
+                        showToast('Số lượng tối thiểu là ' + min, 'error');
+                    } else if (value > max) {
+                        this.value = max;
+                        showToast('Số lượng tối đa là ' + max, 'error');
+                    }
+                });
+            }
+        }
+        
+        // Product sharing
+        function shareProduct(platform) {
+            const url = encodeURIComponent(window.location.href);
+            const title = encodeURIComponent(document.title);
+            let shareUrl = '';
+            
+            switch (platform) {
+                case 'facebook':
+                    shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${url}`;
+                    break;
+                case 'twitter':
+                    shareUrl = `https://twitter.com/intent/tweet?url=${url}&text=${title}`;
+                    break;
+                case 'pinterest':
+                    const image = encodeURIComponent(document.getElementById('mainImage')?.src || '');
+                    shareUrl = `https://pinterest.com/pin/create/button/?url=${url}&media=${image}&description=${title}`;
+                    break;
+                case 'copy':
+                    navigator.clipboard.writeText(window.location.href).then(() => {
+                        showToast('Đã copy link sản phẩm!', 'success');
+                    });
+                    return;
+            }
+            
+            if (shareUrl) {
+                window.open(shareUrl, '_blank', 'width=600,height=400');
+            }
+        }
+        
+        // Product comparison (future feature)
+        function addToCompare(productId) {
+            let compareList = JSON.parse(localStorage.getItem('compareProducts') || '[]');
+            
+            if (compareList.includes(productId)) {
+                showToast('Sản phẩm đã có trong danh sách so sánh', 'info');
+                return;
+            }
+            
+            if (compareList.length >= 3) {
+                showToast('Chỉ có thể so sánh tối đa 3 sản phẩm', 'error');
+                return;
+            }
+            
+            compareList.push(productId);
+            localStorage.setItem('compareProducts', JSON.stringify(compareList));
+            showToast('Đã thêm vào danh sách so sánh', 'success');
+            
+            updateCompareButton();
+        }
+        
+        function updateCompareButton() {
+            const compareList = JSON.parse(localStorage.getItem('compareProducts') || '[]');
+            const compareBtn = document.getElementById('compareBtn');
+            if (compareBtn) {
+                compareBtn.innerHTML = `<i class="fas fa-balance-scale me-1"></i>So sánh (${compareList.length})`;
+            }
+        }
+        
+        // Recently viewed products
+        function addToRecentlyViewed(productId, productName, productImage, productPrice) {
+            let recentProducts = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+            
+            // Remove if already exists
+            recentProducts = recentProducts.filter(p => p.id !== productId);
+            
+            // Add to beginning
+            recentProducts.unshift({
+                id: productId,
+                name: productName,
+                image: productImage,
+                price: productPrice,
+                viewedAt: new Date().toISOString()
+            });
+            
+            // Keep only last 10
+            recentProducts = recentProducts.slice(0, 10);
+            
+            localStorage.setItem('recentlyViewed', JSON.stringify(recentProducts));
+        }
+        
+        // Initialize all features
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🔧 TKT Shop Product Detail - Universal Handler loaded');
             console.log('📊 Database Schema:', '<?= $db_schema['table'] ?>', hasVariants ? 'with variants' : 'simple');
@@ -582,7 +714,174 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             <?php if ($db_schema['has_variants']): ?>
             console.log('🎨 Variants:', <?= count($variants) ?>, 'sizes:', <?= count($sizes) ?>, 'colors:', <?= count($colors) ?>);
             <?php endif; ?>
+            
+            // Initialize features
+            initImageZoom();
+            validateQuantity();
+            updateCompareButton();
+            
+            // Add to recently viewed
+            addToRecentlyViewed(
+                <?= $product['id'] ?>,
+                '<?= addslashes($product[$f['name']]) ?>',
+                '<?= addslashes($product[$f['image']] ?? '') ?>',
+                <?= $product['current_price'] ?>
+            );
+            
+            // Auto-scroll to product if coming from search
+            if (window.location.hash === '#product') {
+                document.querySelector('.product-info')?.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Ctrl + Enter to add to cart
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    addToCartAjax();
+                }
+                
+                // Escape to close modals
+                if (e.key === 'Escape') {
+                    const modals = document.querySelectorAll('.modal.show');
+                    modals.forEach(modal => {
+                        const bsModal = bootstrap.Modal.getInstance(modal);
+                        if (bsModal) bsModal.hide();
+                    });
+                }
+            });
         });
+        
+        // Handle browser back/forward
+        window.addEventListener('popstate', function(e) {
+            if (e.state && e.state.productId) {
+                // Handle product navigation without page reload
+                console.log('Navigating to product:', e.state.productId);
+            }
+        });
+        
+        // Update URL without reload when variant changes
+        function updateUrlWithVariant(size, colorId) {
+            if (history.pushState) {
+                const url = new URL(window.location);
+                if (size) url.searchParams.set('size', size);
+                if (colorId) url.searchParams.set('color', colorId);
+                
+                history.pushState({
+                    productId: <?= $product['id'] ?>,
+                    size: size,
+                    colorId: colorId
+                }, '', url);
+            }
+        }
+        
+        // SEO and Social Meta Updates
+        function updatePageMeta(productName, productImage, productPrice) {
+            // Update page title
+            document.title = productName + ' - TKT Shop';
+            
+            // Update meta description
+            const metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc) {
+                metaDesc.content = `Mua ${productName} giá tốt tại TKT Shop. Giá: ${formatPrice(productPrice)}. Giao hàng nhanh, đổi trả dễ dàng.`;
+            }
+            
+            // Update Open Graph meta tags
+            const ogTitle = document.querySelector('meta[property="og:title"]');
+            const ogDescription = document.querySelector('meta[property="og:description"]');
+            const ogImage = document.querySelector('meta[property="og:image"]');
+            const ogUrl = document.querySelector('meta[property="og:url"]');
+            
+            if (ogTitle) ogTitle.content = productName;
+            if (ogDescription) ogDescription.content = `Mua ${productName} tại TKT Shop`;
+            if (ogImage) ogImage.content = productImage;
+            if (ogUrl) ogUrl.content = window.location.href;
+        }
+        
+        // Update page meta on load
+        updatePageMeta(
+            '<?= addslashes($product[$f['name']]) ?>',
+            '<?= getImageUrl($product[$f['image']]) ?>',
+            <?= $product['current_price'] ?>
+        );
+        
+        // Analytics tracking (placeholder for future integration)
+        function trackProductView(productId, productName, category, price) {
+            // Google Analytics 4 event
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'view_item', {
+                    currency: 'VND',
+                    value: price,
+                    items: [{
+                        item_id: productId,
+                        item_name: productName,
+                        category: category,
+                        price: price
+                    }]
+                });
+            }
+            
+            // Facebook Pixel event
+            if (typeof fbq !== 'undefined') {
+                fbq('track', 'ViewContent', {
+                    content_type: 'product',
+                    content_ids: [productId],
+                    content_name: productName,
+                    value: price,
+                    currency: 'VND'
+                });
+            }
+            
+            console.log('📊 Tracked product view:', productId, productName);
+        }
+        
+        // Track product view
+        trackProductView(
+            <?= $product['id'] ?>,
+            '<?= addslashes($product[$f['name']]) ?>',
+            '<?= addslashes($product[$f['category_name']] ?? 'Unknown') ?>',
+            <?= $product['current_price'] ?>
+        );
+    </script>
+    
+    <!-- Add Social Meta Tags -->
+    <meta property="og:type" content="product">
+    <meta property="og:title" content="<?= htmlspecialchars($product[$f['name']]) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($product[$f['description']] ?? '') ?>">
+    <meta property="og:image" content="<?= getImageUrl($product[$f['image']]) ?>">
+    <meta property="og:url" content="<?= getCurrentUrl() ?>">
+    <meta property="product:price:amount" content="<?= $product['current_price'] ?>">
+    <meta property="product:price:currency" content="VND">
+    
+    <!-- Schema.org Product Markup -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": "<?= addslashes($product[$f['name']]) ?>",
+        "image": "<?= getImageUrl($product[$f['image']]) ?>",
+        "description": "<?= addslashes($product[$f['description']] ?? '') ?>",
+        "brand": {
+            "@type": "Brand",
+            "name": "<?= addslashes($product[$f['brand']] ?? 'TKT Shop') ?>"
+        },
+        "offers": {
+            "@type": "Offer",
+            "url": "<?= getCurrentUrl() ?>",
+            "priceCurrency": "VND",
+            "price": "<?= $product['current_price'] ?>",
+            "availability": "https://schema.org/InStock",
+            "seller": {
+                "@type": "Organization",
+                "name": "TKT Shop"
+            }
+        },
+        "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "<?= $product[$f['rating']] ?>",
+            "reviewCount": "<?= $product[$f['rating_count']] ?>"
+        }
+    }
     </script>
     
     <?php include 'includes/footer.php'; ?>
