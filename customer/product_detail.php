@@ -61,6 +61,7 @@ if ($id > 0) {
         
         // Nếu tìm thấy trong bảng products
         if ($product) {
+            echo "<!-- DEBUG: Found product in 'products' table -->";
             $product_table = 'products';
             
             // Cập nhật lượt xem (giả lập)
@@ -119,6 +120,7 @@ if (!$product && $slug) {
         $product = $stmt->fetch();
         
         if ($product) {
+            echo "<!-- DEBUG: Found product in 'san_pham_chinh' table -->";
             $product_table = 'san_pham_chinh';
             
             // Cập nhật lượt xem
@@ -162,6 +164,7 @@ if (!$product && $slug) {
 
 // Nếu vẫn không tìm thấy sản phẩm
 if (!$product) {
+    echo "<!-- DEBUG: Product not found in any table -->";
     header('Location: products.php?error=product_not_found');
     exit;
 }
@@ -474,6 +477,19 @@ function formatPrice($price) {
 </head>
 <body>
     <div class="container py-4">
+        <!-- Debug Info -->
+        <div class="alert alert-info">
+            <strong>🔍 DEBUG:</strong> 
+            Sản phẩm từ bảng: <strong><?= $product_table ?></strong> | 
+            ID: <?= $product['id'] ?> | 
+            Tên: <?= htmlspecialchars($product['ten_san_pham']) ?>
+            <?php if ($product_table == 'san_pham_chinh'): ?>
+                | Biến thể: <?= count($variants) ?>
+            <?php else: ?>
+                | Stock: <?= $product['stock_quantity'] ?>
+            <?php endif; ?>
+        </div>
+
         <!-- Breadcrumb -->
         <nav aria-label="breadcrumb" class="mb-4">
             <ol class="breadcrumb">
