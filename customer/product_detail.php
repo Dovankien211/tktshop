@@ -1,5 +1,5 @@
 <?php
-// customer/product_detail.php - FIXED VERSION
+// customer/product_detail.php - FINAL FIXED VERSION
 /**
  * Chi tiết sản phẩm - Hỗ trợ cả bảng products và san_pham_chinh
  */
@@ -183,12 +183,14 @@ if (!$product) {
     exit;
 }
 
-// Xử lý AJAX thêm vào giỏ hàng (CHỈ cho sản phẩm có biến thể)
+// Xử lý AJAX thêm vào giỏ hàng
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_to_cart') {
+    // 🔧 FIX: Đảm bảo chỉ output JSON
+    ob_clean(); // Xóa tất cả output trước đó
     header('Content-Type: application/json');
     
     if ($product_table == 'products') {
-        // Cho bảng products - thêm giỏ hàng đơn giản
+        // Cho bảng products - thêm giỏ hàng với bien_the_id = NULL
         $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
         
         if ($product['stock_quantity'] < $so_luong) {
@@ -205,7 +207,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 $session_id = $_SESSION['session_id'];
             }
             
-            // 🔧 FIX: Dùng database với bien_the_id = NULL (đã test thành công)
             // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
             $check_cart = $pdo->prepare("
                 SELECT * FROM gio_hang 
@@ -224,45 +225,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                     exit;
                 }
                 
-                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ?, ngay_cap_nhat = NOW() WHERE id = ?")
+                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
                     ->execute([$new_quantity, $product['gia_hien_tai'], $existing_item['id']]);
                 
-                echo json_encode([
-                    'success' => true, 
-                    'message' => 'Cập nhật số lượng sản phẩm thành công!',
-                    'action' => 'updated'
-                ]);
+                $message = 'Cập nhật số lượng sản phẩm thành công!';
             } else {
-                // Thêm mới với bien_the_id = NULL (đã test thành công)
+                // Thêm mới với bien_the_id = NULL
                 $pdo->prepare("
                     INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
                     VALUES (?, ?, ?, NULL, ?, ?, NOW())
                 ")->execute([$customer_id, $session_id, $product['id'], $so_luong, $product['gia_hien_tai']]);
                 
-                echo json_encode([
-                    'success' => true, 
-                    'message' => 'Thêm sản phẩm vào giỏ hàng thành công!',
-                    'action' => 'added'
-                ]);
+                $message = 'Thêm sản phẩm vào giỏ hàng thành công!';
             }
             
             // Đếm tổng số sản phẩm trong giỏ hàng
-            $count_stmt = $pdo->prepare("
-                SELECT SUM(so_luong) FROM gio_hang 
-                WHERE (khach_hang_id = ? OR session_id = ?)
-            ");
+            $count_stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE (khach_hang_id = ? OR session_id = ?)");
             $count_stmt->execute([$customer_id, $session_id]);
             $cart_count = $count_stmt->fetchColumn() ?: 0;
             
-            // Log để debug
-            error_log("Added to database cart: Product ID {$product['id']}, Quantity: $so_luong, Total cart: $cart_count");
+            echo json_encode([
+                'success' => true, 
+                'message' => $message,
+                'cart_count' => $cart_count
+            ]);
             
-            echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
         } catch (Exception $e) {
-            echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => 'Lỗi database: ' . $e->getMessage()]);
         }
     } else {
-        // Logic cũ cho san_pham_chinh với biến thể
+        // Logic cho san_pham_chinh với biến thể
         $kich_co = $_POST['kich_co'] ?? '';
         $mau_sac_id = (int)($_POST['mau_sac_id'] ?? 0);
         $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
@@ -287,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         }
         
         if ($selected_variant['so_luong_ton_kho'] < $so_luong) {
-            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho!']);
+            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $selected_variant['so_luong_ton_kho']]);
             exit;
         }
         
@@ -300,6 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 $session_id = $_SESSION['session_id'];
             }
             
+            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
             $check_cart = $pdo->prepare("
                 SELECT * FROM gio_hang 
                 WHERE bien_the_id = ? 
@@ -309,17 +302,45 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             $existing_item = $check_cart->fetch();
             
             if ($existing_item) {
+                // Cập nhật số lượng
                 $new_quantity = $existing_item['so_luong'] + $so_luong;
+                if ($new_quantity > $selected_variant['so_luong_ton_kho']) {
+                    echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Tối đa có thể mua: ' . $selected_variant['so_luong_ton_kho']]);
+                    exit;
+                }
+                
                 $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
                     ->execute([$new_quantity, $selected_variant['gia_ban'], $existing_item['id']]);
+                
+                $message = 'Cập nhật số lượng sản phẩm thành công!';
             } else {
+                // 🔧 FIX FINAL: INSERT với đầy đủ san_pham_id và bien_the_id
                 $pdo->prepare("
-                    INSERT INTO gio_hang (khach_hang_id, session_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
-                    VALUES (?, ?, ?, ?, ?, NOW())
-                ")->execute([$customer_id, $session_id, $selected_variant['id'], $so_luong, $selected_variant['gia_ban']]);
+                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())
+                ")->execute([
+                    $customer_id, 
+                    $session_id, 
+                    $product['id'],              // san_pham_id từ san_pham_chinh
+                    $selected_variant['id'],     // bien_the_id từ bien_the_san_pham
+                    $so_luong, 
+                    $selected_variant['gia_ban']
+                ]);
+                
+                $message = 'Thêm sản phẩm vào giỏ hàng thành công!';
             }
             
-            echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
+            // Đếm tổng số sản phẩm trong giỏ hàng
+            $count_stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE (khach_hang_id = ? OR session_id = ?)");
+            $count_stmt->execute([$customer_id, $session_id]);
+            $cart_count = $count_stmt->fetchColumn() ?: 0;
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => $message,
+                'cart_count' => $cart_count
+            ]);
+            
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
         }
