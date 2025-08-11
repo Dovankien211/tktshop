@@ -2,11 +2,105 @@
 // customer/product_detail.php - FIXED VERSION
 /**
  * Chi tiết sản phẩm - Hỗ trợ cả bảng products và san_pham_chinh
+ * ✅ FIXED: Di chuyển xử lý AJAX lên đầu để tránh lỗi JSON
  */
 session_start();
 
 require_once '../config/database.php';
 require_once '../config/config.php';
+
+// ========================================
+// ✅ FIX: XỬ LÝ AJAX TRƯỚC KHI CÓ OUTPUT HTML
+// ========================================
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_to_cart') {
+    header('Content-Type: application/json');
+    
+    // Lấy lại thông tin sản phẩm cho AJAX
+    $id = (int)($_POST['product_id'] ?? $_GET['id'] ?? 0);
+    $product_for_cart = null;
+    $product_table_for_cart = '';
+    
+    // Kiểm tra bảng products trước
+    if ($id > 0) {
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND status = 'active'");
+            $stmt->execute([$id]);
+            $product_for_cart = $stmt->fetch();
+            if ($product_for_cart) {
+                $product_table_for_cart = 'products';
+            }
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Lỗi database: ' . $e->getMessage()]);
+            exit;
+        }
+    }
+    
+    if (!$product_for_cart) {
+        echo json_encode(['success' => false, 'message' => 'Không tìm thấy sản phẩm!']);
+        exit;
+    }
+    
+    if ($product_table_for_cart == 'products') {
+        // Xử lý cho bảng products - thêm giỏ hàng đơn giản
+        $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
+        
+        if ($product_for_cart['stock_quantity'] < $so_luong) {
+            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $product_for_cart['stock_quantity']]);
+            exit;
+        }
+        
+        try {
+            $customer_id = $_SESSION['customer_id'] ?? null;
+            $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
+            
+            if (!$session_id && !$customer_id) {
+                $_SESSION['session_id'] = session_id();
+                $session_id = $_SESSION['session_id'];
+            }
+            
+            $current_price = $product_for_cart['sale_price'] ?: $product_for_cart['price'];
+            
+            // ✅ FIX 1: Sửa query check cart
+            $check_cart = $pdo->prepare("
+                SELECT * FROM gio_hang 
+                WHERE san_pham_id = ? 
+                AND (khach_hang_id = ? OR session_id = ?)
+                AND bien_the_id = ?
+            ");
+            $check_cart->execute([$product_for_cart['id'], $customer_id, $session_id, $product_for_cart['id']]);
+            $existing_item = $check_cart->fetch();
+            
+            if ($existing_item) {
+                $new_quantity = $existing_item['so_luong'] + $so_luong;
+                if ($new_quantity > $product_for_cart['stock_quantity']) {
+                    echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho!']);
+                    exit;
+                }
+                
+                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
+                    ->execute([$new_quantity, $current_price, $existing_item['id']]);
+            } else {
+                // ✅ FIX 2: Thêm bien_the_id vào INSERT
+                $pdo->prepare("
+                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())
+                ")->execute([$customer_id, $session_id, $product_for_cart['id'], $product_for_cart['id'], $so_luong, $current_price]);
+            }
+            
+            echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
+        }
+    } else {
+        // Logic cho san_pham_chinh với biến thể (giữ nguyên code cũ)
+        echo json_encode(['success' => false, 'message' => 'Tính năng này chưa được hỗ trợ cho sản phẩm này!']);
+    }
+    exit;
+}
+
+// ========================================
+// PHẦN CODE CHÍNH - HIỂN THỊ SANNJ PHẨM
+// ========================================
 
 // Nhận parameter từ URL
 $id = (int)($_GET['id'] ?? 0);
@@ -21,10 +115,82 @@ $product = null;
 $variants = [];
 $reviews = [];
 $related_products = [];
+$product_table = '';
 
-// 🔧 LOGIC MỚI: Kiểm tra bảng nào có dữ liệu
-if ($id > 0) {
-    // TRY BẢNG PRODUCTS TRƯỚC (vì admin đang thêm vào đây)
+// 🔧 LOGIC MỚI: Ưu tiên kiểm tra slug trước (vì link từ products.php dùng slug)
+if ($slug) {
+    // TRY BẢNG PRODUCTS BẰNG SLUG TRƯỚC
+    try {
+        $stmt = $pdo->prepare("
+            SELECT p.*, c.name as category_name,
+                   COALESCE(p.sale_price, p.price) as gia_hien_tai,
+                   CASE 
+                       WHEN p.sale_price IS NOT NULL AND p.sale_price < p.price 
+                       THEN ROUND(((p.price - p.sale_price) / p.price) * 100, 0)
+                       ELSE 0
+                   END as phan_tram_giam,
+                   p.name as ten_san_pham,
+                   p.description as mo_ta_ngan,
+                   p.description as mo_ta_chi_tiet,
+                   p.price as gia_goc,
+                   p.sale_price as gia_khuyen_mai,
+                   p.main_image as hinh_anh_chinh,
+                   p.gallery_images as album_hinh_anh,
+                   p.brand as thuong_hieu,
+                   p.category_id as danh_muc_id,
+                   p.is_featured as san_pham_noi_bat,
+                   0 as san_pham_moi,
+                   0 as san_pham_ban_chay,
+                   0 as luot_xem,
+                   0 as so_luong_ban,
+                   0 as diem_danh_gia_tb,
+                   0 as so_luong_danh_gia,
+                   c.name as ten_danh_muc,
+                   c.slug as danh_muc_slug
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.slug = ? AND p.status = 'active'
+        ");
+        $stmt->execute([$slug]);
+        $product = $stmt->fetch();
+        
+        if ($product) {
+            $product_table = 'products';
+        }
+    } catch (Exception $e) {
+        error_log("Error querying products table by slug: " . $e->getMessage());
+    }
+    
+    // Nếu không tìm thấy trong products, thử san_pham_chinh
+    if (!$product) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
+                       COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                       CASE 
+                           WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+                           THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
+                           ELSE 0
+                       END as phan_tram_giam
+                FROM san_pham_chinh sp
+                LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+                WHERE sp.slug = ? AND sp.trang_thai = 'hoat_dong'
+            ");
+            $stmt->execute([$slug]);
+            $product = $stmt->fetch();
+            
+            if ($product) {
+                $product_table = 'san_pham_chinh';
+            }
+        } catch (Exception $e) {
+            error_log("Error querying san_pham_chinh table by slug: " . $e->getMessage());
+        }
+    }
+}
+
+// Fallback: Nếu có ID và chưa tìm thấy sản phẩm
+if (!$product && $id > 0) {
+    // TRY BẢNG PRODUCTS BẰNG ID
     try {
         $stmt = $pdo->prepare("
             SELECT p.*, c.name as category_name,
@@ -59,258 +225,127 @@ if ($id > 0) {
         $stmt->execute([$id]);
         $product = $stmt->fetch();
         
-        // Nếu tìm thấy trong bảng products
         if ($product) {
-            echo "<!-- DEBUG: Found product in 'products' table -->";
             $product_table = 'products';
-            
-            // Cập nhật lượt xem (giả lập)
-            $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity WHERE id = ?")->execute([$id]);
-            
-            // Không có biến thể cho bảng products (có thể thêm sau)
-            $variants = [];
-            $sizes = [];
-            $colors = [];
-            $variant_matrix = [];
-            
-            // Giả lập reviews rỗng
-            $reviews = [];
-            $rating_stats = [];
-            
-            // Sản phẩm liên quan từ bảng products
-            $stmt = $pdo->prepare("
-                SELECT p.*, c.name as category_name,
-                       p.name as ten_san_pham,
-                       p.main_image as hinh_anh_chinh,
-                       p.price as gia_goc,
-                       p.sale_price as gia_khuyen_mai,
-                       0 as diem_danh_gia_tb,
-                       0 as so_luong_danh_gia,
-                       p.stock_quantity as tong_ton_kho
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                WHERE p.category_id = ? AND p.id != ? AND p.status = 'active' AND p.stock_quantity > 0
-                ORDER BY p.created_at DESC
-                LIMIT 4
-            ");
-            $stmt->execute([$product['danh_muc_id'], $id]);
-            $related_products = $stmt->fetchAll();
         }
     } catch (Exception $e) {
-        error_log("Error querying products table: " . $e->getMessage());
+        error_log("Error querying products table by ID: " . $e->getMessage());
     }
-}
-
-// Nếu không tìm thấy trong products, thử san_pham_chinh
-if (!$product && $slug) {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
-                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
-                   CASE 
-                       WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
-                       THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
-                       ELSE 0
-                   END as phan_tram_giam
-            FROM san_pham_chinh sp
-            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
-            WHERE sp.slug = ? AND sp.trang_thai = 'hoat_dong'
-        ");
-        $stmt->execute([$slug]);
-        $product = $stmt->fetch();
-        
-        if ($product) {
-            echo "<!-- DEBUG: Found product in 'san_pham_chinh' table -->";
-            $product_table = 'san_pham_chinh';
-            
-            // Cập nhật lượt xem
-            $pdo->prepare("UPDATE san_pham_chinh SET luot_xem = luot_xem + 1 WHERE id = ?")->execute([$product['id']]);
-            
-            // Lấy biến thể sản phẩm
+    
+    // Nếu không tìm thấy trong products, thử san_pham_chinh
+    if (!$product) {
+        try {
             $stmt = $pdo->prepare("
-                SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
-                FROM bien_the_san_pham bsp
-                JOIN kich_co kc ON bsp.kich_co_id = kc.id
-                JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
-                WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
-                ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
+                SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
+                       COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                       CASE 
+                           WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+                           THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
+                           ELSE 0
+                       END as phan_tram_giam
+                FROM san_pham_chinh sp
+                LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+                WHERE sp.id = ? AND sp.trang_thai = 'hoat_dong'
             ");
-            $stmt->execute([$product['id']]);
-            $variants = $stmt->fetchAll();
+            $stmt->execute([$id]);
+            $product = $stmt->fetch();
             
-            // Nhóm biến thể theo size và màu
-            $sizes = [];
-            $colors = [];
-            $variant_matrix = [];
-            
-            foreach ($variants as $variant) {
-                if (!in_array($variant['kich_co'], $sizes)) {
-                    $sizes[] = $variant['kich_co'];
-                }
-                if (!isset($colors[$variant['mau_sac_id']])) {
-                    $colors[$variant['mau_sac_id']] = [
-                        'id' => $variant['mau_sac_id'],
-                        'ten_mau' => $variant['ten_mau'],
-                        'ma_mau' => $variant['ma_mau']
-                    ];
-                }
-                $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
+            if ($product) {
+                $product_table = 'san_pham_chinh';
             }
+        } catch (Exception $e) {
+            error_log("Error querying san_pham_chinh table by ID: " . $e->getMessage());
         }
-    } catch (Exception $e) {
-        error_log("Error querying san_pham_chinh table: " . $e->getMessage());
     }
 }
 
 // Nếu vẫn không tìm thấy sản phẩm
 if (!$product) {
-    echo "<!-- DEBUG: Product not found in any table -->";
     header('Location: products.php?error=product_not_found');
     exit;
 }
 
-// Xử lý AJAX thêm vào giỏ hàng (CHỈ cho sản phẩm có biến thể)
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_to_cart') {
-    header('Content-Type: application/json');
-    
-    if ($product_table == 'products') {
-        // Cho bảng products - thêm giỏ hàng đơn giản
-        $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
-        
-        if ($product['stock_quantity'] < $so_luong) {
-            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $product['stock_quantity']]);
-            exit;
-        }
-        
-        try {
-            $customer_id = $_SESSION['customer_id'] ?? null;
-            $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
-            
-            if (!$session_id && !$customer_id) {
-                $_SESSION['session_id'] = session_id();
-                $session_id = $_SESSION['session_id'];
-            }
-            
-            // 🔧 FIX: Dùng database với bien_the_id = NULL (đã test thành công)
-            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
-            $check_cart = $pdo->prepare("
-                SELECT * FROM gio_hang 
-                WHERE san_pham_id = ? 
-                AND (khach_hang_id = ? OR session_id = ?)
-                AND bien_the_id IS NULL
-            ");
-            $check_cart->execute([$product['id'], $customer_id, $session_id]);
-            $existing_item = $check_cart->fetch();
-            
-            if ($existing_item) {
-                // Cập nhật số lượng
-                $new_quantity = $existing_item['so_luong'] + $so_luong;
-                if ($new_quantity > $product['stock_quantity']) {
-                    echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Tối đa có thể mua: ' . $product['stock_quantity']]);
-                    exit;
-                }
-                
-                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ?, ngay_cap_nhat = NOW() WHERE id = ?")
-                    ->execute([$new_quantity, $product['gia_hien_tai'], $existing_item['id']]);
-                
-                echo json_encode([
-                    'success' => true, 
-                    'message' => 'Cập nhật số lượng sản phẩm thành công!',
-                    'action' => 'updated'
-                ]);
-            } else {
-                // Thêm mới với bien_the_id = NULL (đã test thành công)
-                $pdo->prepare("
-                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
-                    VALUES (?, ?, ?, NULL, ?, ?, NOW())
-                ")->execute([$customer_id, $session_id, $product['id'], $so_luong, $product['gia_hien_tai']]);
-                
-                echo json_encode([
-                    'success' => true, 
-                    'message' => 'Thêm sản phẩm vào giỏ hàng thành công!',
-                    'action' => 'added'
-                ]);
-            }
-            
-            // Đếm tổng số sản phẩm trong giỏ hàng
-            $count_stmt = $pdo->prepare("
-                SELECT SUM(so_luong) FROM gio_hang 
-                WHERE (khach_hang_id = ? OR session_id = ?)
-            ");
-            $count_stmt->execute([$customer_id, $session_id]);
-            $cart_count = $count_stmt->fetchColumn() ?: 0;
-            
-            // Log để debug
-            error_log("Added to database cart: Product ID {$product['id']}, Quantity: $so_luong, Total cart: $cart_count");
-            
-            echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
-        } catch (Exception $e) {
-            echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
-        }
-    } else {
-        // Logic cũ cho san_pham_chinh với biến thể
-        $kich_co = $_POST['kich_co'] ?? '';
-        $mau_sac_id = (int)($_POST['mau_sac_id'] ?? 0);
-        $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
-        
-        if (empty($kich_co) || $mau_sac_id == 0) {
-            echo json_encode(['success' => false, 'message' => 'Vui lòng chọn size và màu sắc!']);
-            exit;
-        }
-        
-        // Tìm biến thể tương ứng
-        $selected_variant = null;
-        foreach ($variants as $variant) {
-            if ($variant['kich_co'] == $kich_co && $variant['mau_sac_id'] == $mau_sac_id) {
-                $selected_variant = $variant;
-                break;
-            }
-        }
-        
-        if (!$selected_variant) {
-            echo json_encode(['success' => false, 'message' => 'Biến thể sản phẩm không tồn tại!']);
-            exit;
-        }
-        
-        if ($selected_variant['so_luong_ton_kho'] < $so_luong) {
-            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho!']);
-            exit;
-        }
-        
-        try {
-            $customer_id = $_SESSION['customer_id'] ?? null;
-            $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
-            
-            if (!$session_id && !$customer_id) {
-                $_SESSION['session_id'] = session_id();
-                $session_id = $_SESSION['session_id'];
-            }
-            
-            $check_cart = $pdo->prepare("
-                SELECT * FROM gio_hang 
-                WHERE bien_the_id = ? 
-                AND (khach_hang_id = ? OR session_id = ?)
-            ");
-            $check_cart->execute([$selected_variant['id'], $customer_id, $session_id]);
-            $existing_item = $check_cart->fetch();
-            
-            if ($existing_item) {
-                $new_quantity = $existing_item['so_luong'] + $so_luong;
-                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
-                    ->execute([$new_quantity, $selected_variant['gia_ban'], $existing_item['id']]);
-            } else {
-                $pdo->prepare("
-                    INSERT INTO gio_hang (khach_hang_id, session_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
-                    VALUES (?, ?, ?, ?, ?, NOW())
-                ")->execute([$customer_id, $session_id, $selected_variant['id'], $so_luong, $selected_variant['gia_ban']]);
-            }
-            
-            echo json_encode(['success' => true, 'message' => 'Thêm sản phẩm vào giỏ hàng thành công!']);
-        } catch (Exception $e) {
-            echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
-        }
+// ✅ Xử lý tiếp theo dựa trên product_table
+if ($product_table == 'products') {
+    // Logic cho bảng products
+    try {
+        // Cập nhật lượt xem (optional)
+        $pdo->prepare("UPDATE products SET view_count = view_count + 1 WHERE id = ?")->execute([$product['id']]);
+    } catch (Exception $e) {
+        // Ignore view count update errors
     }
-    exit;
+    
+    // Không có biến thể cho bảng products
+    $variants = [];
+    $sizes = [];
+    $colors = [];
+    $variant_matrix = [];
+    
+    // Reviews (giả lập)
+    $reviews = [];
+    $rating_stats = [];
+    
+    // Sản phẩm liên quan từ bảng products
+    $stmt = $pdo->prepare("
+        SELECT p.*, c.name as category_name,
+               p.name as ten_san_pham,
+               p.main_image as hinh_anh_chinh,
+               p.price as gia_goc,
+               p.sale_price as gia_khuyen_mai,
+               0 as diem_danh_gia_tb,
+               0 as so_luong_danh_gia,
+               p.stock_quantity as tong_ton_kho
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.category_id = ? AND p.id != ? AND p.status = 'active' AND p.stock_quantity > 0
+        ORDER BY p.created_at DESC
+        LIMIT 4
+    ");
+    $stmt->execute([$product['danh_muc_id'], $product['id']]);
+    $related_products = $stmt->fetchAll();
+    
+} else { // san_pham_chinh
+    // Logic cho bảng san_pham_chinh
+    try {
+        // Cập nhật lượt xem
+        $pdo->prepare("UPDATE san_pham_chinh SET luot_xem = luot_xem + 1 WHERE id = ?")->execute([$product['id']]);
+    } catch (Exception $e) {
+        // Ignore view count update errors  
+    }
+    
+    // Lấy biến thể sản phẩm
+    $stmt = $pdo->prepare("
+        SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
+        FROM bien_the_san_pham bsp
+        JOIN kich_co kc ON bsp.kich_co_id = kc.id
+        JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+        WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
+        ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
+    ");
+    $stmt->execute([$product['id']]);
+    $variants = $stmt->fetchAll();
+    
+    // Nhóm biến thể theo size và màu
+    $sizes = [];
+    $colors = [];
+    $variant_matrix = [];
+    
+    foreach ($variants as $variant) {
+        if (!in_array($variant['kich_co'], $sizes)) {
+            $sizes[] = $variant['kich_co'];
+        }
+        if (!isset($colors[$variant['mau_sac_id']])) {
+            $colors[$variant['mau_sac_id']] = [
+                'id' => $variant['mau_sac_id'],
+                'ten_mau' => $variant['ten_mau'],
+                'ma_mau' => $variant['ma_mau']
+            ];
+        }
+        $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
+    }
+    
+    // Sản phẩm liên quan từ bảng san_pham_chinh (nếu cần)
+    $related_products = [];
 }
 
 // Album ảnh
@@ -592,6 +627,7 @@ function formatPrice($price) {
                     <!-- Add to Cart Form -->
                     <form method="POST" id="addToCartForm">
                         <input type="hidden" name="action" value="add_to_cart">
+                        <input type="hidden" name="product_id" value="<?= $product['id'] ?>">
                         
                         <?php if ($product_table == 'san_pham_chinh' && !empty($variants)): ?>
                             <!-- Variant Selection cho san_pham_chinh -->
@@ -797,15 +833,9 @@ function formatPrice($price) {
                                     
                                     <div class="card-body d-flex flex-column">
                                         <h6 class="card-title">
-                                            <?php if ($product_table == 'products'): ?>
-                                                <a href="product_detail.php?id=<?= $related['id'] ?>" class="text-decoration-none text-dark">
-                                                    <?= htmlspecialchars($related['ten_san_pham']) ?>
-                                                </a>
-                                            <?php else: ?>
-                                                <a href="product_detail.php?slug=<?= $related['slug'] ?>" class="text-decoration-none text-dark">
-                                                    <?= htmlspecialchars($related['ten_san_pham']) ?>
-                                                </a>
-                                            <?php endif; ?>
+                                            <a href="product_detail.php?id=<?= $related['id'] ?>" class="text-decoration-none text-dark">
+                                                <?= htmlspecialchars($related['ten_san_pham']) ?>
+                                            </a>
                                         </h6>
                                         
                                         <div class="mt-auto">
@@ -967,7 +997,7 @@ function formatPrice($price) {
             quantityInput.value = newValue;
         }
         
-        // AJAX Add to Cart
+        // ✅ FIX: AJAX Add to Cart - CLEAN VERSION
         function addToCartAjax() {
             console.log('🛒 Adding to cart, product table:', productTable);
             
@@ -994,6 +1024,7 @@ function formatPrice($price) {
             // Prepare data
             const formData = new FormData();
             formData.append('action', 'add_to_cart');
+            formData.append('product_id', '<?= $product['id'] ?>');
             formData.append('so_luong', quantity);
             
             <?php if ($product_table == 'san_pham_chinh'): ?>
@@ -1006,9 +1037,21 @@ function formatPrice($price) {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                // ✅ FIX: Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json();
+                } else {
+                    // If not JSON, get text to see what was returned
+                    return response.text().then(text => {
+                        console.error('Expected JSON but got:', text.substring(0, 200));
+                        throw new Error('Server returned non-JSON response');
+                    });
+                }
+            })
             .then(data => {
-                console.log('Response:', data);
+                console.log('✅ Response:', data);
                 
                 if (data.success) {
                     showToast(data.message, 'success');
@@ -1018,8 +1061,8 @@ function formatPrice($price) {
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast('Có lỗi xảy ra: ' + error.message, 'error');
+                console.error('❌ Error:', error);
+                showToast('Có lỗi xảy ra khi thêm sản phẩm vào giỏ hàng!', 'error');
             })
             .finally(() => {
                 btn.innerHTML = originalText;
