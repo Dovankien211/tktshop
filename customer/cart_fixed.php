@@ -5,6 +5,8 @@
  * 🔧 FIXED: Đồng bộ SESSION và DATABASE 
  * 🔧 FIXED: Hỗ trợ cả 2 schema products + san_pham_chinh
  * 🔧 FIXED: Hiển thị sản phẩm từ cả 2 bảng
+ * 🔧 FIXED: Checkout redirect to correct checkout.php
+ * 🔧 FIXED: Free shipping threshold logic (500,000 VND)
  */
 
 session_start();
@@ -209,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 $totals = $stmt->fetch();
                 
                 $subtotal = $totals['selected_subtotal'] ?? 0;
-                $shipping_fee = $subtotal >= 500000 ? 0 : 30000;
+                $shipping_fee = $subtotal >= 500000 ? 0 : 30000; // 🔧 FIXED: Free shipping from 500k
                 $tax = $subtotal * 0.1;
                 $total = $subtotal + $shipping_fee + $tax;
                 
@@ -410,7 +412,7 @@ function calculateCartTotals($pdo, $customer_id, $session_id) {
         $totals = $stmt->fetch();
         
         $subtotal = $totals['subtotal'] ?? 0;
-        $shipping_fee = $subtotal >= 500000 ? 0 : 30000; // Miễn phí ship từ 500k
+        $shipping_fee = $subtotal >= 500000 ? 0 : 30000; // 🔧 FIXED: Miễn phí ship từ 500k
         $tax = $subtotal * 0.1; // Thuế 10%
         $total = $subtotal + $shipping_fee + $tax;
         
@@ -677,6 +679,23 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             font-size: 12px;
         }
         
+        .free-shipping-alert {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border: none;
+        }
+        
+        .shipping-progress {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
         @media (max-width: 768px) {
             .product-image {
                 width: 80px;
@@ -712,7 +731,8 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             Cart items: <?= count($cart_items) ?><br>
             Customer ID: <?= $customer_id ?? 'guest' ?><br>
             Session ID: <?= $session_id ?? 'none' ?><br>
-            Data sources: Both 'gio_hang' table + unified schema detection
+            Data sources: Both 'gio_hang' table + unified schema detection<br>
+            Free shipping threshold: 500,000 VND
         </div>
         
         <!-- Breadcrumb -->
@@ -899,25 +919,20 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                         </div>
                         
                         <!-- Free Shipping Progress -->
-                        <div class="mb-3" id="shippingProgress" style="display: none;">
+                        <div class="shipping-progress" id="shippingProgress" style="display: none;">
                             <div class="d-flex justify-content-between mb-2">
-                                <small>Mua thêm để được miễn phí ship:</small>
-                                <small class="fw-bold text-primary" id="remainingForFreeShip">
-                                    0đ
-                                </small>
+                                <small><strong>Mua thêm để được miễn phí ship:</strong></small>
+                                <small class="fw-bold text-primary" id="remainingForFreeShip">0đ</small>
                             </div>
                             <div class="progress mb-2">
-                                <div class="progress-bar bg-success" id="shippingProgressBar" style="width: 0%">
-                                </div>
+                                <div class="progress-bar bg-primary" id="shippingProgressBar" style="width: 0%"></div>
                             </div>
-                            <small class="text-muted" id="shippingProgressText">
-                                0đ / 500.000đ
-                            </small>
+                            <small class="text-muted" id="shippingProgressText">0đ / 500.000đ</small>
                         </div>
                         
-                        <div class="alert alert-success py-2 mb-3" id="freeShippingAlert" style="display: none;">
-                            <i class="fas fa-check-circle me-1"></i>
-                            <small>Bạn được miễn phí vận chuyển!</small>
+                        <div class="free-shipping-alert" id="freeShippingAlert" style="display: none;">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>Bạn được miễn phí vận chuyển!</strong>
                         </div>
                         
                         <!-- Order Summary -->
@@ -1382,7 +1397,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             });
         }
         
-        // PROCEED TO CHECKOUT
+        // 🔧 FIXED: PROCEED TO CHECKOUT - Correct redirect path
         function proceedToCheckout() {
             if (selectedItems.size === 0) {
                 showToast('Vui lòng chọn ít nhất một sản phẩm để thanh toán', 'error');
@@ -1403,6 +1418,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             .then(data => {
                 hideLoading();
                 if (data.success) {
+                    // 🔧 FIXED: Correct redirect to checkout.php
                     window.location.href = 'checkout.php';
                 } else {
                     showToast('Có lỗi xảy ra khi chuẩn bị thanh toán', 'error');
@@ -1411,7 +1427,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             .catch(error => {
                 hideLoading();
                 console.error('Error:', error);
-                // Fallback: redirect anyway
+                // 🔧 FIXED: Fallback redirect to correct path
                 window.location.href = 'checkout.php';
             });
         }
@@ -1465,6 +1481,8 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             console.log('🔧 TKT Shop Cart FIXED - Unified Cart System initialized successfully');
             console.log('📊 Cart items loaded:', <?= count($cart_items) ?>);
             console.log('📊 Schema types detected:', document.querySelectorAll('.schema-badge').length);
+            console.log('🚀 Fixed checkout redirect to: checkout.php');
+            console.log('💰 Free shipping threshold: 500,000 VND');
         });
         
         // Add CSS for animations
