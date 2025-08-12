@@ -1024,6 +1024,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
+        // 🔧 FORCE FRESH LOAD - Add timestamp: <?= time() ?>
         // AJAX Functions for Cart CRUD with Checkbox Selection - FIXED VERSION
         
         let selectedItems = new Set();
@@ -1399,11 +1400,15 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
         
         // 🔧 FIXED: PROCEED TO CHECKOUT - Correct redirect path
         function proceedToCheckout() {
+            console.log('🔧 DEBUG: proceedToCheckout() called from cart_fixed.php');
+            console.log('🔧 DEBUG: Selected items:', selectedItems.size);
+            
             if (selectedItems.size === 0) {
                 showToast('Vui lòng chọn ít nhất một sản phẩm để thanh toán', 'error');
                 return;
             }
             
+            console.log('🔧 DEBUG: About to send AJAX request to set checkout items');
             showLoading();
             
             // Store selected items in session for checkout
@@ -1483,6 +1488,16 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
             console.log('📊 Schema types detected:', document.querySelectorAll('.schema-badge').length);
             console.log('🚀 Fixed checkout redirect to: checkout.php');
             console.log('💰 Free shipping threshold: 500,000 VND');
+            
+            // 🔧 DEBUG: Check if checkout button exists and its attributes
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            if (checkoutBtn) {
+                console.log('🔧 DEBUG: Checkout button found');
+                console.log('🔧 DEBUG: Button onclick:', checkoutBtn.onclick);
+                console.log('🔧 DEBUG: Button getAttribute onclick:', checkoutBtn.getAttribute('onclick'));
+            } else {
+                console.log('🔧 DEBUG: Checkout button NOT found');
+            }
         });
         
         // Add CSS for animations
