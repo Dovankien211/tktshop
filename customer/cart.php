@@ -215,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                         'tax_formatted' => formatPrice($tax),
                         'total' => $total,
                         'total_formatted' => formatPrice($total),
-                        'free_shipping_remaining' => max(0, 500000 - $subtotal)
+                        'free_shipping_remaining' => max(0, 0 - $subtotal)
                     ]
                 ]);
                 
@@ -334,7 +334,7 @@ function calculateCartTotals($pdo, $customer_id, $session_id) {
     $totals = $stmt->fetch();
     
     $subtotal = $totals['subtotal'] ?? 0;
-    $shipping_fee = $subtotal >= 500000 ? 0 : 30000; // Miễn phí ship từ 500k
+    $shipping_fee = $subtotal >= 0 ? 0 : 0; // Miễn phí ship từ 500k
     $tax = $subtotal * 0.1; // Thuế 10%
     $total = $subtotal + $shipping_fee + $tax;
     
