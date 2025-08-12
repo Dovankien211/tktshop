@@ -697,7 +697,7 @@ $total_amount = $subtotal + $phi_van_chuyen + $thue;
                             <span id="taxAmount"><?= formatPrice($thue) ?></span>
                         </div>
                         
-                        <?php if ($subtotal >= 500000): ?>
+                        <?php if ($subtotal >= 0): ?>
                             <div class="summary-row text-success">
                                 <small><i class="fas fa-check me-1"></i>Miễn phí vận chuyển</small>
                             </div>
