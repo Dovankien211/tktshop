@@ -548,7 +548,7 @@ $total_amount = $subtotal + $phi_van_chuyen + $thue;
                                 </div>
                                 <div class="text-end">
                                     <div class="fw-bold" id="shipping-cost-nhanh">
-                                        <?= $subtotal >= 0 ? '<span class="text-decoration-line-through">30đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
+                                        <?= $subtotal >= 0 ? '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
                                     </div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
                                 </div>
