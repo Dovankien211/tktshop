@@ -289,7 +289,7 @@ if (isset($_GET['error']) && $_GET['error'] === 'vnpay') {
 }
 
 // 🔧 NEW: Tính phí vận chuyển và thuế mặc định
-$phi_van_chuyen = $subtotal >= 500000 ? 0 : 30000;
+$phi_van_chuyen = $subtotal >= 0 ? 0 : 30000;
 $thue = $subtotal * 0.1; // Thuế 10%
 $total_amount = $subtotal + $phi_van_chuyen + $thue;
 ?>
