@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($subtotal < 0) { // Miễn phí vận chuyển cho đơn từ 500k
         switch ($form_data['phuong_thuc_van_chuyen']) {
             case 'giao_hang_nhanh':
-                $phi_van_chuyen = 30000;
+                $phi_van_chuyen = 0;
                 break;
             case 'giao_hang_tieu_chuan':
                 $phi_van_chuyen = 20000;
@@ -539,7 +539,7 @@ $total_amount = $subtotal + $phi_van_chuyen + $thue;
                             <i class="fas fa-shipping-fast me-2"></i>Phương thức vận chuyển
                         </div>
                         
-                        <div class="shipping-option selected" onclick="selectShipping('giao_hang_nhanh', 30000)">
+                        <div class="shipping-option selected" onclick="selectShipping('giao_hang_nhanh', 0)">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <input type="radio" name="phuong_thuc_van_chuyen" value="giao_hang_nhanh" checked>
