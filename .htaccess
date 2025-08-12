@@ -1,4 +1,4 @@
-# File: .htaccess (trong thư mục tktshop/)
+# File: .htaccess (trong thư mục tktshop/) - FIXED VERSION
 RewriteEngine On
 
 # Set base path for subdirectory
@@ -41,17 +41,26 @@ RewriteRule ^admin/(users|categories|sizes|colors|products|reviews|orders)/?$ ad
 RewriteRule ^admin/(users|categories|sizes|colors|products|reviews|orders)/(create|edit|variants|detail|update_status)/?$ admin/$1/$2.php [L,QSA]
 
 # ================================
-# CUSTOMER ROUTES (for future)
+# CUSTOMER ROUTES - FIXED VERSION
 # ================================
 
 # Customer root - homepage  
 RewriteRule ^/?$ customer/index.php [L]
 
-# Customer pages
+# Customer pages - ALLOW _fixed files to work normally
 RewriteRule ^login/?$ customer/login.php [L]
 RewriteRule ^register/?$ customer/register.php [L]
-RewriteRule ^products/?$ customer/products.php [L,QSA]
-RewriteRule ^cart/?$ customer/cart.php [L]
+
+# 🔧 FIXED: Comment out the old redirect rules that cause issues
+# RewriteRule ^products/?$ customer/products.php [L,QSA]
+# RewriteRule ^cart/?$ customer/cart.php [L]
+
+# 🔧 NEW: Allow both original and _fixed files to coexist
+# Products routes
+RewriteRule ^products/?$ customer/products_fixed.php [L,QSA]
+
+# Cart routes  
+RewriteRule ^cart/?$ customer/cart_fixed.php [L]
 
 # ================================
 # STATIC FILES
@@ -70,7 +79,7 @@ RewriteRule \.(jpg|jpeg|png|gif|webp)$ - [L]
 # FALLBACK
 # ================================
 
-# If file exists, serve it
+# If file exists, serve it (this allows cart_fixed.php, products_fixed.php to work)
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
