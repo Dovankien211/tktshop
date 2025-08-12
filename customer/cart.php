@@ -349,8 +349,8 @@ function calculateCartTotals($pdo, $customer_id, $session_id) {
         'total_formatted' => formatPrice($total),
         'item_count' => $totals['item_count'] ?? 0,
         'total_quantity' => $totals['total_quantity'] ?? 0,
-        'free_shipping_threshold' => 500000,
-        'free_shipping_remaining' => max(0, 500000 - $subtotal)
+        'free_shipping_threshold' => 0,
+        'free_shipping_remaining' => max(0, 0 - $subtotal)
     ];
 }
 
