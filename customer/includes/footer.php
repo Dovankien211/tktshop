@@ -1,7 +1,8 @@
 <?php
-// customer/includes/footer.php
+// customer/includes/footer.php - FIXED LINKS VERSION
 /**
  * Footer chung cho website khách hàng
+ * 🔧 FIXED: Tất cả link products.php → products_fixed.php
  */
 ?>
 
@@ -51,7 +52,8 @@
                     foreach ($footer_categories as $cat): 
                     ?>
                         <li class="mb-2">
-                            <a href="/customer/products.php?category=<?= $cat['id'] ?>" 
+                            <!-- 🔧 FIXED: products.php → products_fixed.php -->
+                            <a href="/tktshop/customer/products_fixed.php?category=<?= $cat['id'] ?>" 
                                class="text-light text-decoration-none hover-primary">
                                 <?= htmlspecialchars($cat['ten_danh_muc']) ?>
                             </a>
@@ -64,20 +66,21 @@
             <div class="col-lg-2 col-md-3 col-6 mb-4">
                 <h6 class="fw-bold mb-3">Thương hiệu</h6>
                 <ul class="list-unstyled">
+                    <!-- 🔧 FIXED: Tất cả products.php → products_fixed.php -->
                     <li class="mb-2">
-                        <a href="/customer/products.php?brand=Nike" class="text-light text-decoration-none hover-primary">Nike</a>
+                        <a href="/tktshop/customer/products_fixed.php?brand=Nike" class="text-light text-decoration-none hover-primary">Nike</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/products.php?brand=Adidas" class="text-light text-decoration-none hover-primary">Adidas</a>
+                        <a href="/tktshop/customer/products_fixed.php?brand=Adidas" class="text-light text-decoration-none hover-primary">Adidas</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/products.php?brand=Converse" class="text-light text-decoration-none hover-primary">Converse</a>
+                        <a href="/tktshop/customer/products_fixed.php?brand=Converse" class="text-light text-decoration-none hover-primary">Converse</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/products.php?brand=Vans" class="text-light text-decoration-none hover-primary">Vans</a>
+                        <a href="/tktshop/customer/products_fixed.php?brand=Vans" class="text-light text-decoration-none hover-primary">Vans</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/products.php?brand=Puma" class="text-light text-decoration-none hover-primary">Puma</a>
+                        <a href="/tktshop/customer/products_fixed.php?brand=Puma" class="text-light text-decoration-none hover-primary">Puma</a>
                     </li>
                 </ul>
             </div>
@@ -87,19 +90,19 @@
                 <h6 class="fw-bold mb-3">Hỗ trợ</h6>
                 <ul class="list-unstyled">
                     <li class="mb-2">
-                        <a href="/customer/guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn mua hàng</a>
+                        <a href="/tktshop/customer/guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn mua hàng</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/size-guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn chọn size</a>
+                        <a href="/tktshop/customer/size-guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn chọn size</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/policy.php" class="text-light text-decoration-none hover-primary">Chính sách đổi trả</a>
+                        <a href="/tktshop/customer/policy.php" class="text-light text-decoration-none hover-primary">Chính sách đổi trả</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/warranty.php" class="text-light text-decoration-none hover-primary">Chính sách bảo hành</a>
+                        <a href="/tktshop/customer/warranty.php" class="text-light text-decoration-none hover-primary">Chính sách bảo hành</a>
                     </li>
                     <li class="mb-2">
-                        <a href="/customer/contact.php" class="text-light text-decoration-none hover-primary">Liên hệ hỗ trợ</a>
+                        <a href="/tktshop/customer/contact.php" class="text-light text-decoration-none hover-primary">Liên hệ hỗ trợ</a>
                     </li>
                 </ul>
             </div>
@@ -110,34 +113,19 @@
                 <div class="text-light">
                     <p class="mb-2">
                         <i class="fas fa-map-marker-alt me-2"></i>
-<<<<<<< HEAD
-                        123 Đường ABC, Quận 1<br>
-                        <span class="ms-4">TP. Hồ Chí Minh</span>
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-phone me-2"></i>
-                        <a href="tel:02812345678" class="text-light text-decoration-none">
-                            (028) 1234 5678
-=======
-                        số nhà 17 ngõ 89 , xã hoài đức, hà nội<br>
+                        số nhà 17 ngõ 89, xã hoài đức, hà nội<br>
                         <span class="ms-4">TP. Hà Nội</span>
                     </p>
                     <p class="mb-2">
                         <i class="fas fa-phone me-2"></i>
                         <a href="tel:0866792996" class="text-light text-decoration-none">
                             (0866) 792996
->>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                         </a>
                     </p>
                     <p class="mb-2">
                         <i class="fas fa-envelope me-2"></i>
-<<<<<<< HEAD
-                        <a href="mailto:info@tktshop.com" class="text-light text-decoration-none">
-                            info@tktshop.com
-=======
                         <a href="mailto:Dovankien072211@gmail.com" class="text-light text-decoration-none">
                             Dovankien072211@gmail.com
->>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                         </a>
                     </p>
                     <p class="mb-0">
@@ -151,7 +139,7 @@
                     <h6 class="fw-bold mb-2">Thanh toán</h6>
                     <div class="d-flex gap-2 flex-wrap">
                         <div class="bg-white p-2 rounded d-flex align-items-center" style="min-width: 60px; height: 35px;">
-                            <img src="/assets/images/vnpay-logo.png" alt="VNPay" style="max-height: 20px; width: auto;">
+                            <img src="/tktshop/assets/images/vnpay-logo.png" alt="VNPay" style="max-height: 20px; width: auto;" onerror="this.style.display='none'">
                         </div>
                         <div class="bg-white p-2 rounded d-flex align-items-center justify-content-center" style="min-width: 60px; height: 35px;">
                             <span class="fw-bold text-dark" style="font-size: 0.8rem;">COD</span>
@@ -173,13 +161,13 @@
             </div>
             <div class="col-md-6 text-md-end">
                 <div class="d-flex justify-content-md-end gap-3 mt-2 mt-md-0">
-                    <a href="/customer/terms.php" class="text-light text-decoration-none hover-primary">
+                    <a href="/tktshop/customer/terms.php" class="text-light text-decoration-none hover-primary">
                         Điều khoản sử dụng
                     </a>
-                    <a href="/customer/privacy.php" class="text-light text-decoration-none hover-primary">
+                    <a href="/tktshop/customer/privacy.php" class="text-light text-decoration-none hover-primary">
                         Chính sách bảo mật
                     </a>
-                    <a href="/customer/sitemap.php" class="text-light text-decoration-none hover-primary">
+                    <a href="/tktshop/customer/sitemap.php" class="text-light text-decoration-none hover-primary">
                         Sơ đồ trang web
                     </a>
                 </div>
@@ -243,6 +231,9 @@
 </style>
 
 <script>
+// 🔧 DEBUG: Footer script loaded
+console.log('🔧 Footer loaded - All links point to *_fixed.php files');
+
 // Back to top functionality
 document.addEventListener('DOMContentLoaded', function() {
     const backToTopBtn = document.getElementById('backToTop');
@@ -289,6 +280,19 @@ document.addEventListener('DOMContentLoaded', function() {
             sessionStorage.setItem('newsletterShown', 'true');
         }, 30000);
     }
+    
+    // 🔧 DEBUG: Check for any incorrect links in footer
+    const incorrectLinks = document.querySelectorAll('a[href*="products.php"]:not([href*="products_fixed.php"])');
+    if (incorrectLinks.length > 0) {
+        console.warn('🔧 WARNING: Found incorrect product links in footer:', incorrectLinks);
+        
+        // Auto-fix product links
+        incorrectLinks.forEach(link => {
+            const oldHref = link.href;
+            link.href = oldHref.replace('products.php', 'products_fixed.php');
+            console.log('🔧 AUTO-FIXED product link:', oldHref, '→', link.href);
+        });
+    }
 });
 
 // External links tracking
@@ -298,4 +302,34 @@ document.querySelectorAll('a[href^="http"]').forEach(link => {
         // TODO: Add analytics tracking
     });
 });
+
+// 🔧 DEBUG: Global link checker
+window.checkAllLinks = function() {
+    console.log('🔧 Checking all links on page...');
+    
+    const cartLinks = document.querySelectorAll('a[href*="cart.php"]:not([href*="cart_fixed.php"])');
+    const productLinks = document.querySelectorAll('a[href*="products.php"]:not([href*="products_fixed.php"])');
+    
+    if (cartLinks.length > 0) {
+        console.warn('🔧 Found incorrect cart links:', cartLinks);
+    }
+    
+    if (productLinks.length > 0) {
+        console.warn('🔧 Found incorrect product links:', productLinks);
+    }
+    
+    if (cartLinks.length === 0 && productLinks.length === 0) {
+        console.log('✅ All links are correct!');
+    }
+    
+    return {
+        cartLinks: cartLinks.length,
+        productLinks: productLinks.length
+    };
+};
+
+// 🔧 Run link check after page load
+setTimeout(() => {
+    window.checkAllLinks();
+}, 1000);
 </script>
