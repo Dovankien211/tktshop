@@ -1074,7 +1074,7 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                         document.getElementById('shippingProgress').style.display = 'block';
                         document.getElementById('freeShippingAlert').style.display = 'none';
                         
-                        const percentage = (totals.selected_subtotal / 500000) * 100;
+                        const percentage = (totals.selected_subtotal / 0) * 0;
                         document.getElementById('shippingProgressBar').style.width = Math.min(percentage, 100) + '%';
                         document.getElementById('remainingForFreeShip').textContent = formatPrice(totals.free_shipping_remaining);
                         document.getElementById('shippingProgressText').textContent = 
