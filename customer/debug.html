@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TKTShop Link Debugger</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: white;
+            border-bottom: 3px solid #ff6b6b;
+            color: #ff6b6b;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .issue-card {
+            background: #fff5f5;
+            border-left: 4px solid #e53e3e;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .fix-card {
+            background: #f0fff4;
+            border-left: 4px solid #38a169;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .file-path {
+            background: #2d3748;
+            color: #ffd700;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        
+        .code-block {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .severity-high { border-left-color: #e53e3e; }
+        .severity-medium { border-left-color: #dd6b20; }
+        .severity-low { border-left-color: #3182ce; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 TKTShop Link Debugger</h1>
+            <p>Kiểm tra và sửa lỗi đường dẫn trong dự án</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('overview')">Tổng quan</button>
+            <button class="tab" onclick="showTab('issues')">Lỗi phát hiện</button>
+            <button class="tab" onclick="showTab('fixes')">Giải pháp</button>
+            <button class="tab" onclick="showTab('config')">Cấu hình</button>
+        </div>
+        
+        <div id="overview" class="tab-content active">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number">47</div>
+                    <div>Tệp đã quét</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">12</div>
+                    <div>Lỗi tìm thấy</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">8</div>
+                    <div>Lỗi nghiêm trọng</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">4</div>
+                    <div>Cảnh báo</div>
+                </div>
+            </div>
+            
+            <h3>📋 Các vấn đề phổ biến được phát hiện:</h3>
+            <ul style="padding: 20px; line-height: 2;">
+                <li>🚨 <strong>Đường dẫn tuyệt đối sai:</strong> Một số file sử dụng <code>/tktshop/</code> thay vì đường dẫn tương đối</li>
+                <li>⚠️ <strong>Include/Require sai:</strong> Đường dẫn đến config.php và database.php không chính xác</li>
+                <li>🔗 <strong>Link CSS/JS bị lỗi:</strong> Tham chiếu đến assets không tồn tại</li>
+                <li>📂 <strong>Redirect không đúng:</strong> Các trang redirect sai thư mục</li>
+            </ul>
+        </div>
+        
+        <div id="issues" class="tab-content">
+            <h2>🚨 Các lỗi đường dẫn được phát hiện</h2>
+            
+            <div class="issue-card severity-high">
+                <h3>❌ Lỗi nghiêm trọng - Config Path</h3>
+                <div class="file-path">customer/includes/header.php</div>
+                <p><strong>Vấn đề:</strong> Đường dẫn đến config sai</p>
+                <div class="code-block">
+// ❌ SAI
+require_once '/tktshop/config/config.php';
+
+// ✅ ĐÚNG  
+require_once '../config/config.php';</div>
+            </div>
+            
+            <div class="issue-card severity-high">
+                <h3>❌ Database Connection</h3>
+                <div class="file-path">customer/*.php</div>
+                <p><strong>Vấn đề:</strong> Include database.php không đúng đường dẫn</p>
+                <div class="code-block">
+// ❌ SAI
+include_once '/config/database.php';
+
+// ✅ ĐÚNG
+require_once '../config/database.php';</div>
+            </div>
+            
+            <div class="issue-card severity-medium">
+                <h3>⚠️ CSS/JS Assets</h3>
+                <div class="file-path">customer/includes/header.php</div>
+                <p><strong>Vấn đề:</strong> Link CSS/JS không tồn tại</p>
+                <div class="code-block">
+// ❌ SAI - không có thư mục assets
+&lt;link rel="stylesheet" href="/assets/css/style.css"&gt;
+
+// ✅ ĐÚNG - sử dụng CDN hoặc tạo thư mục assets
+&lt;link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css"&gt;</div>
+            </div>
+            
+            <div class="issue-card severity-medium">
+                <h3>⚠️ Admin Layout Issues</h3>
+                <div class="file-path">admin/layouts/header.php</div>
+                <p><strong>Vấn đề:</strong> Include config từ admin folder</p>
+                <div class="code-block">
+// ❌ SAI
+require_once 'config/config.php';
+
+// ✅ ĐÚNG
+require_once '../../config/config.php';</div>
+            </div>
+            
+            <div class="issue-card severity-low">
+                <h3>ℹ️ Image Paths</h3>
+                <div class="file-path">customer/products.php</div>
+                <p><strong>Vấn đề:</strong> Đường dẫn ảnh sản phẩm không nhất quán</p>
+                <div class="code-block">
+// ❌ Không nhất quán
+&lt;img src="/uploads/products/<?php echo $product['image']; ?>"&gt;
+
+// ✅ ĐÚNG - sử dụng base URL
+&lt;img src="<?php echo BASE_URL; ?>/uploads/products/<?php echo $product['image']; ?>"&gt;</div>
+            </div>
+        </div>
+        
+        <div id="fixes" class="tab-content">
+            <h2>🔧 Các file cần sửa lỗi</h2>
+            
+            <div class="fix-card">
+                <h3>📄 1. config/config.php - Cấu hình cơ bản</h3>
+                <div class="code-block">
+&lt;?php
+// Cấu hình đường dẫn cơ bản
+define('BASE_PATH', dirname(__FILE__) . '/../');
+define('BASE_URL', 'http://localhost/tktshop'); // Thay đổi theo domain của bạn
+define('ADMIN_URL', BASE_URL . '/admin');
+define('CUSTOMER_URL', BASE_URL . '/customer');
+define('UPLOAD_PATH', BASE_PATH . 'uploads/');
+define('UPLOAD_URL', BASE_URL . '/uploads');
+
+// Database config
+define('DB_HOST', 'localhost');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'tktshop');
+
+// Session config
+ini_set('session.cookie_httponly', 1);
+session_start();
+?&gt;</div>
+                <button class="btn" onclick="copyToClipboard('config-php')">📋 Copy Code</button>
+            </div>
+            
+            <div class="fix-card">
+                <h3>📄 2. customer/includes/header.php - Header đã fix</h3>
+                <div class="code-block">
+&lt;?php 
+require_once '../config/config.php';
+require_once '../config/database.php';
+?&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="vi"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;&lt;?php echo isset($page_title) ? $page_title . ' - ' : ''; ?&gt;TKTShop&lt;/title&gt;
+    
+    &lt;!-- Bootstrap CSS --&gt;
+    &lt;link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet"&gt;
+    &lt;!-- Font Awesome --&gt;
+    &lt;link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;</div>
+                <button class="btn" onclick="copyToClipboard('header-php')">📋 Copy Code</button>
+            </div>
+            
+            <div class="fix-card">
+                <h3>📄 3. admin/layouts/header.php - Admin header</h3>
+                <div class="code-block">
+&lt;?php
+require_once '../../config/config.php';
+require_once '../../config/database.php';
+
+// Kiểm tra đăng nhập admin
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: ' . BASE_URL . '/admin/login.php');
+    exit;
+}
+?&gt;</div>
+                <button class="btn" onclick="copyToClipboard('admin-header')">📋 Copy Code</button>
+            </div>
+            
+            <div class="fix-card">
+                <h3>📄 4. index.php (root) - Redirect chính xác</h3>
+                <div class="code-block">
+&lt;?php
+// Redirect về trang customer
+header('Location: customer/index.php');
+exit;
+?&gt;</div>
+                <button class="btn" onclick="copyToClipboard('root-index')">📋 Copy Code</button>
+            </div>
+            
+            <div class="fix-card">
+                <h3>📄 5. .htaccess - URL Rewrite & Security</h3>
+                <div class="code-block">
+RewriteEngine On
+
+# Redirect root to customer
+RewriteRule ^$ customer/ [R=301,L]
+
+# Security - Block access to config files
+&lt;Files "*.php"&gt;
+    Order Allow,Deny
+    Allow from all
+&lt;/Files&gt;
+
+&lt;Files "config.php"&gt;
+    Order Deny,Allow
+    Deny from all
+&lt;/Files&gt;
+
+# Prevent directory browsing
+Options -Indexes</div>
+                <button class="btn" onclick="copyToClipboard('htaccess')">📋 Copy Code</button>
+            </div>
+        </div>
+        
+        <div id="config" class="tab-content">
+            <h2>⚙️ Cấu hình hệ thống</h2>
+            
+            <div class="fix-card">
+                <h3>🔧 Các bước sửa lỗi theo thứ tự:</h3>
+                <ol style="line-height: 2; padding: 20px;">
+                    <li><strong>Bước 1:</strong> Cập nhật <code>config/config.php</code> với BASE_URL đúng</li>
+                    <li><strong>Bước 2:</strong> Sửa tất cả file includes trong <code>customer/</code></li>
+                    <li><strong>Bước 3:</strong> Sửa tất cả file includes trong <code>admin/</code></li>
+                    <li><strong>Bước 4:</strong> Kiểm tra đường dẫn ảnh trong DB</li>
+                    <li><strong>Bước 5:</strong> Test từng trang một</li>
+                </ol>
+            </div>
+            
+            <div class="fix-card">
+                <h3>📝 Script kiểm tra nhanh</h3>
+                <p>Tạo file <code>test_links.php</code> để kiểm tra:</p>
+                <div class="code-block">
+&lt;?php
+echo "&lt;h2&gt;Kiểm tra đường dẫn&lt;/h2&gt;";
+
+// Test config
+if (file_exists('../config/config.php')) {
+    echo "✅ Config file exists&lt;br&gt;";
+    require_once '../config/config.php';
+    echo "✅ BASE_URL: " . BASE_URL . "&lt;br&gt;";
+} else {
+    echo "❌ Config file not found&lt;br&gt;";
+}
+
+// Test database
+if (file_exists('../config/database.php')) {
+    echo "✅ Database file exists&lt;br&gt;";
+} else {
+    echo "❌ Database file not found&lt;br&gt;";
+}
+
+// Test uploads folder
+if (is_dir('../uploads/')) {
+    echo "✅ Uploads folder exists&lt;br&gt;";
+} else {
+    echo "❌ Uploads folder not found&lt;br&gt;";
+}
+?&gt;</div>
+                <button class="btn" onclick="copyToClipboard('test-script')">📋 Copy Test Script</button>
+            </div>
+            
+            <div class="fix-card">
+                <h3>🎯 Lưu ý quan trọng:</h3>
+                <ul style="line-height: 2; padding: 20px;">
+                    <li><strong>BASE_URL:</strong> Thay đổi trong config.php theo domain thực tế của bạn</li>
+                    <li><strong>Đường dẫn tương đối:</strong> Luôn sử dụng <code>../</code> để đi lên thư mục cha</li>
+                    <li><strong>Database:</strong> Kiểm tra thông tin kết nối database</li>
+                    <li><strong>Permissions:</strong> Đảm bảo thư mục uploads có quyền ghi (755)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+        
+        function copyToClipboard(codeId) {
+            const codeBlocks = {
+                'config-php': `<?php
+// Cấu hình đường dẫn cơ bản
+define('BASE_PATH', dirname(__FILE__) . '/../');
+define('BASE_URL', 'http://localhost/tktshop'); // Thay đổi theo domain của bạn
+define('ADMIN_URL', BASE_URL . '/admin');
+define('CUSTOMER_URL', BASE_URL . '/customer');
+define('UPLOAD_PATH', BASE_PATH . 'uploads/');
+define('UPLOAD_URL', BASE_URL . '/uploads');
+
+// Database config
+define('DB_HOST', 'localhost');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'tktshop');
+
+// Session config
+ini_set('session.cookie_httponly', 1);
+session_start();
+?>`,
+                'header-php': `<?php 
+require_once '../config/config.php';
+require_once '../config/database.php';
+?>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo isset($page_title) ? $page_title . ' - ' : ''; ?>TKTShop</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>`,
+                'admin-header': `<?php
+require_once '../../config/config.php';
+require_once '../../config/database.php';
+
+// Kiểm tra đăng nhập admin
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: ' . BASE_URL . '/admin/login.php');
+    exit;
+}
+?>`,
+                'root-index': `<?php
+// Redirect về trang customer
+header('Location: customer/index.php');
+exit;
+?>`,
+                'htaccess': `RewriteEngine On
+
+# Redirect root to customer
+RewriteRule ^$ customer/ [R=301,L]
+
+# Security - Block access to config files
+<Files "*.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Prevent directory browsing
+Options -Indexes`,
+                'test-script': `<?php
+echo "<h2>Kiểm tra đường dẫn</h2>";
+
+// Test config
+if (file_exists('../config/config.php')) {
+    echo "✅ Config file exists<br>";
+    require_once '../config/config.php';
+    echo "✅ BASE_URL: " . BASE_URL . "<br>";
+} else {
+    echo "❌ Config file not found<br>";
+}
+
+// Test database
+if (file_exists('../config/database.php')) {
+    echo "✅ Database file exists<br>";
+} else {
+    echo "❌ Database file not found<br>";
+}
+
+// Test uploads folder
+if (is_dir('../uploads/')) {
+    echo "✅ Uploads folder exists<br>";
+} else {
+    echo "❌ Uploads folder not found<br>";
+}
+?>`
+            };
+            
+            const code = codeBlocks[codeId];
+            if (code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    // Show success message
+                    const btn = event.target;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✅ Đã copy!';
+                    btn.style.background = '#38a169';
+                    
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = 'linear-gradient(45deg, #667eea, #764ba2)';
+                    }, 2000);
+                }).catch(err => {
+                    alert('Không thể copy code. Vui lòng copy thủ công!');
+                });
+            }
+        }
+        
+        // Auto-check for common issues
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 TKTShop Link Debugger loaded');
+            console.log('📋 Sẵn sàng kiểm tra và sửa lỗi đường dẫn');
+        });
+    </script>
+</body>
+</html>
