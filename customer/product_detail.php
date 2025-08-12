@@ -14,7 +14,7 @@ $id = (int)($_GET['id'] ?? 0);
 $slug = $_GET['slug'] ?? '';
 
 if (!$id && !$slug) {
-    header('Location: products.php');
+    header('Location: products_fixed.php');
     exit;
 }
 
