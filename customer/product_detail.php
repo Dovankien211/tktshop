@@ -180,7 +180,7 @@ if (!$product && $id > 0) {
 
 // Nếu vẫn không tìm thấy sản phẩm
 if (!$product) {
-    header('Location: products.php?error=product_not_found');
+    header('Location: products_fixed.php?error=product_not_found');
     exit;
 }
 
