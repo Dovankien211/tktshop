@@ -4,6 +4,7 @@
  * Chi tiết sản phẩm - Hỗ trợ cả bảng products và san_pham_chinh
  */
 session_start();
+require_once 'product_detail_helper.php';
 
 require_once '../config/database.php';
 require_once '../config/config.php';
