@@ -7,7 +7,14 @@
  * 🔧 FIXED: Hiển thị sản phẩm từ cả 2 bảng
  * 🔧 FIXED: Checkout redirect to correct checkout.php
  * 🔧 FIXED: Free shipping threshold logic (500,000 VND)
+ * 🔧 FIXED: Anti-cache headers to prevent redirect issues
  */
+
+// 🔧 FORCE NO CACHE - Prevent browser cache issues
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
 
 session_start();
 require_once '../config/database.php';
@@ -960,7 +967,10 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                             </div>
                             
                             <div class="d-grid gap-2">
-                                <button class="btn btn-primary btn-lg" id="checkoutBtn" onclick="proceedToCheckout()" disabled>
+                                <button class="btn btn-primary btn-lg" 
+                                        id="checkoutBtn" 
+                                        onclick="debugProceedToCheckout()" 
+                                        disabled>
                                     <i class="fas fa-credit-card me-2"></i>
                                     Thanh toán
                                 </button>
@@ -1396,6 +1406,43 @@ $page_title = 'Giỏ hàng (' . $cart_totals['item_count'] . ') - ' . SITE_NAME;
                 showToast('Có lỗi xảy ra', 'error');
                 console.error('Error:', error);
             });
+        }
+        
+        // 🔧 DEBUG FUNCTION - Detailed checkout debugging
+        function debugProceedToCheckout() {
+            console.log('🚨 DEBUG START: debugProceedToCheckout() called');
+            console.log('🚨 DEBUG: Current URL:', window.location.href);
+            console.log('🚨 DEBUG: Selected items:', selectedItems);
+            console.log('🚨 DEBUG: Selected items size:', selectedItems.size);
+            
+            // Check if original function exists
+            if (typeof proceedToCheckout === 'function') {
+                console.log('🚨 DEBUG: proceedToCheckout function exists');
+            } else {
+                console.log('🚨 ERROR: proceedToCheckout function NOT found');
+            }
+            
+            // Check for any global redirect functions
+            console.log('🚨 DEBUG: Checking for conflicting functions...');
+            if (window.redirectToCart) {
+                console.log('🚨 WARNING: window.redirectToCart exists:', window.redirectToCart);
+            }
+            if (window.goToCart) {
+                console.log('🚨 WARNING: window.goToCart exists:', window.goToCart);
+            }
+            if (window.checkoutRedirect) {
+                console.log('🚨 WARNING: window.checkoutRedirect exists:', window.checkoutRedirect);
+            }
+            
+            // Test direct redirect
+            console.log('🚨 DEBUG: Testing direct redirect to checkout.php...');
+            
+            setTimeout(() => {
+                console.log('🚨 DEBUG: Executing redirect in 2 seconds...');
+                window.location.href = '/tktshop/customer/checkout.php';
+            }, 2000);
+            
+            return false; // Prevent any other event handlers
         }
         
         // 🔧 FIXED: PROCEED TO CHECKOUT - Correct redirect path
