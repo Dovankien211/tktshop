@@ -25,13 +25,68 @@ function getUnifiedFeaturedProducts($pdo, $limit = 6) {
             FROM san_pham_chinh sp
             LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
             LEFT JOIN bien_the_san_pham bsp ON sp.id = bsp.san_pham_id AND bsp.trang_thai = 'hoat_dong'
-            WHERE sp.trang_thai = 'hoat_dong'
+            WHERE sp.san_pham_noi_bat = 1 AND sp.trang_thai = 'hoat_dong'
+            GROUP BY sp.id
+            HAVING tong_ton_kho > 0
+            ORDER BY sp.luot_xem DESC, sp.ngay_tao DESC
+            LIMIT " . intval($limit/2)
+        )->fetchAll();
+
+        $en_products = $pdo->query("
+            SELECT p.*, c.name as category_name,
+                   COALESCE(p.sale_price, p.price) as gia_hien_tai,
+                   p.price as gia_thap_nhat,
+                   p.price as gia_cao_nhat,
+                   p.stock_quantity as tong_ton_kho,
+                   'english' as source_schema,
+                   p.name as ten_san_pham,
+                   p.main_image as hinh_anh_chinh,
+                   p.slug as slug,
+                   p.brand as thuong_hieu,
+                   p.price as gia_goc,
+                   p.sale_price as gia_khuyen_mai,
+                   p.is_featured as san_pham_noi_bat,
+                   0 as san_pham_moi,
+                   p.short_description as mo_ta_ngan,
+                   0 as diem_danh_gia_tb,
+                   0 as so_luong_danh_gia,
+                   0 as luot_xem
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.is_featured = 1 AND p.status = 'active' AND p.stock_quantity > 0
+            ORDER BY p.created_at DESC
+            LIMIT " . intval($limit/2)
+        )->fetchAll();
+
+        return array_merge($vn_products, $en_products);
+    } catch (Exception $e) {
+        error_log("getUnifiedFeaturedProducts error: " . $e->getMessage());
+        return [];
+    }
+}
+
+function getUnifiedNewProducts($pdo, $limit = 8) {
+    try {
+        // Query từ Vietnamese schema - sản phẩm mới
+        $vn_products = $pdo->query("
+            SELECT sp.*, dm.ten_danh_muc as category_name,
+                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                   MIN(bsp.gia_ban) as gia_thap_nhat,
+                   MAX(bsp.gia_ban) as gia_cao_nhat,
+                   SUM(bsp.so_luong_ton_kho) as tong_ton_kho,
+                   'vietnamese' as source_schema
+            FROM san_pham_chinh sp
+            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+            LEFT JOIN bien_the_san_pham bsp ON sp.id = bsp.san_pham_id AND bsp.trang_thai = 'hoat_dong'
+            WHERE sp.trang_thai = 'hoat_dong' 
+                AND sp.ngay_tao >= DATE_SUB(NOW(), INTERVAL 30 DAY)
             GROUP BY sp.id
             HAVING tong_ton_kho > 0
             ORDER BY sp.ngay_tao DESC
             LIMIT " . intval($limit/2)
         )->fetchAll();
 
+        // Query từ English schema - sản phẩm mới
         $en_products = $pdo->query("
             SELECT p.*, c.name as category_name,
                    COALESCE(p.sale_price, p.price) as gia_hien_tai,
@@ -54,6 +109,7 @@ function getUnifiedFeaturedProducts($pdo, $limit = 6) {
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.status = 'active' AND p.stock_quantity > 0
+                AND p.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
             ORDER BY p.created_at DESC
             LIMIT " . intval($limit/2)
         )->fetchAll();
@@ -104,6 +160,13 @@ function getUnifiedCategories($pdo, $limit = 6) {
     } catch (Exception $e) {
         error_log("getUnifiedCategories error: " . $e->getMessage());
         return [];
+    }
+}
+
+// Helper function để format giá tiền
+if (!function_exists('formatPrice')) {
+    function formatPrice($price) {
+        return number_format($price, 0, ',', '.') . 'đ';
     }
 }
 
@@ -234,6 +297,15 @@ $main_categories = getUnifiedCategories($pdo, 6);
             margin: 10px 0;
             font-size: 12px;
         }
+
+        .feature-item {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .toast-container {
+            z-index: 10000;
+        }
     </style>
 </head>
 <body>
@@ -354,6 +426,373 @@ $main_categories = getUnifiedCategories($pdo, 6);
                     </div>
                 <?php endforeach; ?>
             </div>
+            
+            <div class="text-center mt-4">
+                <a href="/tktshop/customer/products_fixed.php?new=1" class="btn btn-outline-primary btn-lg">
+                    Xem tất cả sản phẩm mới (FIXED)
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="py-5 bg-success text-white">
+        <div class="container">
+            <div class="row text-center">
+                <div class="col-md-3 mb-4">
+                    <div class="feature-item">
+                        <i class="fas fa-database fa-3x mb-3"></i>
+                        <h5>Unified Database</h5>
+                        <p class="mb-0">Đồng bộ cả 2 schema Vietnamese + English</p>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="feature-item">
+                        <i class="fas fa-shopping-cart fa-3x mb-3"></i>
+                        <h5>Cart Fixed</h5>
+                        <p class="mb-0">SESSION + DATABASE sync hoàn hảo</p>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="feature-item">
+                        <i class="fas fa-bug fa-3x mb-3"></i>
+                        <h5>Bugs Fixed</h5>
+                        <p class="mb-0">Sửa tất cả lỗi hiển thị và giỏ hàng</p>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="feature-item">
+                        <i class="fas fa-rocket fa-3x mb-3"></i>
+                        <h5>Performance</h5>
+                        <p class="mb-0">Tối ưu tốc độ và trải nghiệm</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <div class="row text-center mb-4">
+                <div class="col-12">
+                    <h3 class="fw-bold">🚀 Test Fixed Features</h3>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3 col-sm-6">
+                    <a href="/tktshop/customer/products_fixed.php" class="btn btn-success w-100 py-3">
+                        <i class="fas fa-list d-block mb-2"></i>
+                        <strong>Products Fixed</strong><br>
+                        <small>Xem tất cả sản phẩm</small>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="/tktshop/customer/cart_fixed.php" class="btn btn-primary w-100 py-3">
+                        <i class="fas fa-shopping-cart d-block mb-2"></i>
+                        <strong>Cart Fixed</strong><br>
+                        <small>Kiểm tra giỏ hàng</small>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="/tktshop/admin/products/add.php" class="btn btn-warning w-100 py-3">
+                        <i class="fas fa-plus d-block mb-2"></i>
+                        <strong>Add Product</strong><br>
+                        <small>Thêm sản phẩm test</small>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="/tktshop/index_fixed.php" class="btn btn-info w-100 py-3">
+                        <i class="fas fa-home d-block mb-2"></i>
+                        <strong>Main Fixed</strong><br>
+                        <small>Trang chủ fixed</small>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section class="py-5 bg-primary text-white">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-8 text-center">
+                    <h3 class="mb-3">Đăng ký nhận thông tin khuyến mãi</h3>
+                    <p class="mb-4">Nhận ngay mã giảm giá 10% cho đơn hàng đầu tiên</p>
+                    <form class="d-flex gap-2 justify-content-center">
+                        <input type="email" class="form-control" style="max-width: 300px;" placeholder="Nhập email của bạn">
+                        <button type="submit" class="btn btn-success">Đăng ký</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <?php include 'includes/footer.php'; ?>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 🔧 FIXED: Add to cart function using fixed API
+        function addToCartFixed(productId, quantity = 1) {
+            if (!productId) {
+                showToast('❌ Sản phẩm không hợp lệ', 'error');
+                return;
+            }
+            
+            // Show loading
+            const btn = event.target.closest('button');
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
+            // Call fixed API
+            fetch('/tktshop/customer/add_to_cart_fixed.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    product_id: productId,
+                    quantity: quantity,
+                    action: 'add'
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showToast('✅ ' + data.message, 'success');
+                    
+                    // Update cart count if element exists
+                    updateCartCount(data.cart_count || data.data?.cart_count);
+                    
+                    // Show product details in toast
+                    if (data.data?.product_name) {
+                        setTimeout(() => {
+                            showToast(`📦 ${data.data.product_name} - ${formatPrice(data.data.price)}`, 'info');
+                        }, 1000);
+                    }
+                } else {
+                    showToast('❌ ' + (data.message || 'Không thể thêm sản phẩm vào giỏ hàng'), 'error');
+                    console.error('Add to cart error:', data);
+                }
+            })
+            .catch(error => {
+                console.error('Network error:', error);
+                showToast('❌ Có lỗi xảy ra khi thêm sản phẩm vào giỏ hàng', 'error');
+            })
+            .finally(() => {
+                // Restore button
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHTML;
+                }
+            });
+        }
+        
+        // Update cart count in header
+        function updateCartCount(count) {
+            const cartCountElements = document.querySelectorAll('.cart-count, #cart-count, [data-cart-count]');
+            cartCountElements.forEach(element => {
+                if (element) {
+                    element.textContent = count || '0';
+                    // Add animation
+                    element.classList.add('animate__animated', 'animate__pulse');
+                    setTimeout(() => {
+                        element.classList.remove('animate__animated', 'animate__pulse');
+                    }, 1000);
+                }
+            });
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            let toastContainer = document.getElementById('toastContainer');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toastContainer';
+                toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+                toastContainer.style.zIndex = '10000';
+                document.body.appendChild(toastContainer);
+            }
+            
+            const toastId = 'toast-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            const iconClass = type === 'success' ? 'check-circle' : (type === 'error' ? 'exclamation-circle' : 'info-circle');
+            const bgClass = type === 'success' ? 'success' : (type === 'error' ? 'danger' : 'info');
+            
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-${iconClass} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, {
+                autohide: true,
+                delay: type === 'error' ? 8000 : 5000
+            });
+            toast.show();
+            
+            // Remove after hiding
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+        
+        // Format price function
+        function formatPrice(amount) {
+            if (!amount) return '0đ';
+            return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+        }
+        
+        // Load cart count from API
+        function loadCartCountFixed() {
+            fetch('/tktshop/customer/cart_fixed.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: 'action=get_cart_count'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.cart_count !== undefined) {
+                    updateCartCount(data.cart_count);
+                }
+            })
+            .catch(error => {
+                console.log('Could not load cart count:', error);
+                // Fallback to 0
+                updateCartCount(0);
+            });
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load cart count
+            loadCartCountFixed();
+            
+            // Smooth scroll for anchor links
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+            
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Add loading animation to product images
+            document.querySelectorAll('.product-image').forEach(img => {
+                if (img.tagName === 'IMG') {
+                    img.addEventListener('load', function() {
+                        this.style.opacity = '1';
+                    });
+                    img.style.opacity = '0.7';
+                    img.style.transition = 'opacity 0.3s ease';
+                }
+            });
+            
+            // Log debug info
+            console.log('🔧 TKT Shop Customer FIXED - Homepage initialized');
+            console.log('📊 Featured products:', <?= count($featured_products) ?>);
+            console.log('📊 New products:', <?= count($new_products) ?>);
+            console.log('📊 Categories:', <?= count($main_categories) ?>);
+            console.log('🔗 Fixed links: products_fixed.php, cart_fixed.php, add_to_cart_fixed.php');
+            
+            // Show welcome message
+            setTimeout(() => {
+                showToast('🎉 Chào mừng đến với TKT Shop - FIXED VERSION!', 'info');
+            }, 1500);
+        });
+        
+        // Global error handler for debugging
+        window.addEventListener('error', function(e) {
+            console.error('Global error caught:', e.error);
+            showToast('❌ Đã xảy ra lỗi: ' + e.message, 'error');
+        });
+        
+        // Add click analytics for debugging
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('a[href*="fixed"]')) {
+                console.log('🔗 Fixed link clicked:', e.target.href);
+            }
+            
+            if (e.target.matches('.product-card, .product-card *')) {
+                const productCard = e.target.closest('.product-card');
+                if (productCard) {
+                    console.log('📦 Product card interaction detected');
+                }
+            }
+        });
+        
+        // Performance monitoring
+        window.addEventListener('load', function() {
+            const loadTime = performance.now();
+            console.log(`⚡ Page loaded in ${Math.round(loadTime)}ms`);
+            
+            if (loadTime > 3000) {
+                console.warn('⚠️ Slow page load detected');
+            }
+        });
+        
+        // Auto-refresh cart count every 30 seconds
+        setInterval(loadCartCountFixed, 30000);
+        
+        // Keyboard shortcuts for developers
+        document.addEventListener('keydown', function(e) {
+            // Ctrl + Shift + D = Toggle debug info
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+                const debugInfo = document.querySelector('.debug-info');
+                if (debugInfo) {
+                    debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+            
+            // Ctrl + Shift + C = Open cart
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
+                window.location.href = '/tktshop/customer/cart_fixed.php';
+            }
+            
+            // Ctrl + Shift + P = Open products
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyP') {
+                window.location.href = '/tktshop/customer/products_fixed.php';
+            }
+        });
+    </script>
+</body>
+</html>
+            </div>
             <div class="text-center mt-4">
                 <a href="/tktshop/customer/products_fixed.php" class="btn btn-success btn-lg">
                     <i class="fas fa-list me-2"></i>Xem tất cả sản phẩm (FIXED)
@@ -393,8 +832,8 @@ $main_categories = getUnifiedCategories($pdo, 6);
                                     <span class="badge bg-danger badge-sale">-<?= $discount_percent ?>%</span>
                                 <?php endif; ?>
                                 
-                                <?php if (!empty($product['san_pham_moi'])): ?>
-                                    <span class="badge bg-success position-absolute" style="top: 35px; left: 10px;">Mới</span>
+                                <?php if (!empty($product['san_pham_noi_bat'])): ?>
+                                    <span class="badge bg-warning position-absolute" style="top: 35px; left: 10px;">Nổi bật</span>
                                 <?php endif; ?>
                             </div>
                             
@@ -530,321 +969,3 @@ $main_categories = getUnifiedCategories($pdo, 6);
                         </div>
                     </div>
                 <?php endforeach; ?>
-            </div>
-            
-            <div class="text-center mt-4">
-                <a href="/tktshop/customer/products_fixed.php?new=1" class="btn btn-outline-primary btn-lg">
-                    Xem tất cả sản phẩm mới (FIXED)
-                </a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Section -->
-    <section class="py-5 bg-success text-white">
-        <div class="container">
-            <div class="row text-center">
-                <div class="col-md-3 mb-4">
-                    <div class="feature-item">
-                        <i class="fas fa-database fa-3x mb-3"></i>
-                        <h5>Unified Database</h5>
-                        <p class="mb-0">Đồng bộ cả 2 schema Vietnamese + English</p>
-                    </div>
-                </div>
-                <div class="col-md-3 mb-4">
-                    <div class="feature-item">
-                        <i class="fas fa-shopping-cart fa-3x mb-3"></i>
-                        <h5>Cart Fixed</h5>
-                        <p class="mb-0">SESSION + DATABASE sync hoàn hảo</p>
-                    </div>
-                </div>
-                <div class="col-md-3 mb-4">
-                    <div class="feature-item">
-                        <i class="fas fa-bug fa-3x mb-3"></i>
-                        <h5>Bugs Fixed</h5>
-                        <p class="mb-0">Sửa tất cả lỗi hiển thị và giỏ hàng</p>
-                    </div>
-                </div>
-                <div class="col-md-3 mb-4">
-                    <div class="feature-item">
-                        <i class="fas fa-rocket fa-3x mb-3"></i>
-                        <h5>Performance</h5>
-                        <p class="mb-0">Tối ưu tốc độ và trải nghiệm</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Quick Actions -->
-    <section class="py-5 bg-light">
-        <div class="container">
-            <div class="row text-center mb-4">
-                <div class="col-12">
-                    <h3 class="fw-bold">🚀 Test Fixed Features</h3>
-                </div>
-            </div>
-            <div class="row g-3">
-                <div class="col-md-3 col-sm-6">
-                    <a href="/tktshop/customer/products_fixed.php" class="btn btn-success w-100 py-3">
-                        <i class="fas fa-list d-block mb-2"></i>
-                        <strong>Products Fixed</strong><br>
-                        <small>Xem tất cả sản phẩm</small>
-                    </a>
-                </div>
-                <div class="col-md-3 col-sm-6">
-                    <a href="/tktshop/customer/cart_fixed.php" class="btn btn-primary w-100 py-3">
-                        <i class="fas fa-shopping-cart d-block mb-2"></i>
-                        <strong>Cart Fixed</strong><br>
-                        <small>Kiểm tra giỏ hàng</small>
-                    </a>
-                </div>
-                <div class="col-md-3 col-sm-6">
-                    <a href="/tktshop/admin/products/add.php" class="btn btn-warning w-100 py-3">
-                        <i class="fas fa-plus d-block mb-2"></i>
-                        <strong>Add Product</strong><br>
-                        <small>Thêm sản phẩm test</small>
-                    </a>
-                </div>
-                <div class="col-md-3 col-sm-6">
-                    <a href="/tktshop/index_fixed.php" class="btn btn-info w-100 py-3">
-                        <i class="fas fa-home d-block mb-2"></i>
-                        <strong>Main Fixed</strong><br>
-                        <small>Trang chủ fixed</small>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <?php include 'includes/footer.php'; ?>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <script>
-        // 🔧 FIXED: Add to cart function using fixed API
-        function addToCartFixed(productId) {
-            if (!productId) {
-                alert('Sản phẩm không hợp lệ');
-                return;
-            }
-            
-            // Show loading
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang thêm...';
-            
-            // Call fixed API
-            fetch('/tktshop/customer/add_to_cart_fixed.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    product_id: productId,
-                    quantity: 1
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Show success message
-                    showToast('✅ ' + data.message, 'success');
-                    
-                    // Update cart count if element exists
-                    const cartCount = document.getElementById('cart-count');
-                    if (cartCount && data.data.cart_count) {
-                        cartCount.textContent = data.data.cart_count;
-                    }
-                    
-                    // Optional: Show product details in toast
-                    if (data.data.product_name) {
-                        setTimeout(() => {
-                            showToast(`📦 ${data.data.product_name} - ${formatPrice(data.data.price)}`, 'info');
-                        }, 1000);
-                    }
-                } else {
-                    showToast('❌ ' + data.message, 'error');
-                    console.error('Add to cart error:', data);
-                }
-            })
-            .catch(error => {
-                console.error('Network error:', error);
-                showToast('❌ Có lỗi xảy ra khi thêm sản phẩm vào giỏ hàng', 'error');
-            })
-            .finally(() => {
-                // Restore button
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            });
-        }
-        
-        // Show toast notification
-        function showToast(message, type = 'success') {
-            let toastContainer = document.getElementById('toastContainer');
-            if (!toastContainer) {
-                toastContainer = document.createElement('div');
-                toastContainer.id = 'toastContainer';
-                toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-                toastContainer.style.zIndex = '10000';
-                document.body.appendChild(toastContainer);
-            }
-            
-            const toastId = 'toast-' + Date.now();
-            const iconClass = type === 'success' ? 'check-circle' : (type === 'error' ? 'exclamation-circle' : 'info-circle');
-            const bgClass = type === 'success' ? 'success' : (type === 'error' ? 'danger' : 'info');
-            
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-white bg-${bgClass} border-0" role="alert">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="fas fa-${iconClass} me-2"></i>
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                </div>
-            `;
-            
-            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-            const toast = new bootstrap.Toast(document.getElementById(toastId));
-            toast.show();
-            
-            setTimeout(() => {
-                const toastElement = document.getElementById(toastId);
-                if (toastElement) toastElement.remove();
-            }, 5000);
-        }
-        
-        // Format price function
-        function formatPrice(amount) {
-            return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
-        }
-        
-        // Load cart count from API
-        function loadCartCountFixed() {
-            fetch('/tktshop/customer/cart_fixed.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: 'action=get_cart_count'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.cart_count !== undefined) {
-                    const cartCountElement = document.getElementById('cart-count');
-                    if (cartCountElement) {
-                        cartCountElement.textContent = data.cart_count;
-                    }
-                }
-            })
-            .catch(error => {
-                console.log('Could not load cart count:', error);
-                // Fallback to 0
-                const cartCountElement = document.getElementById('cart-count');
-                if (cartCountElement) {
-                    cartCountElement.textContent = '0';
-                }
-            });
-        }
-        
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Load cart count
-            loadCartCountFixed();
-            
-            // Smooth scroll for anchor links
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    const target = document.querySelector(this.getAttribute('href'));
-                    if (target) {
-                        target.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start'
-                        });
-                    }
-                });
-            });
-            
-            // Log debug info
-            console.log('🔧 TKT Shop Customer FIXED - Homepage initialized');
-            console.log('📊 Featured products:', <?= count($featured_products) ?>);
-            console.log('📊 New products:', <?= count($new_products) ?>);
-            console.log('📊 Categories:', <?= count($main_categories) ?>);
-            console.log('🔗 Fixed links: products_fixed.php, cart_fixed.php, add_to_cart_fixed.php');
-        });
-        
-        // Global error handler for debugging
-        window.addEventListener('error', function(e) {
-            console.error('Global error caught:', e.error);
-        });
-        
-        // Add click analytics for debugging
-        document.addEventListener('click', function(e) {
-            if (e.target.matches('a[href*="fixed"]')) {
-                console.log('🔗 Fixed link clicked:', e.target.href);
-            }
-        });
-    </script>
-</body>
-</html>pdo->query("
-            SELECT sp.*, dm.ten_danh_muc as category_name,
-                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
-                   MIN(bsp.gia_ban) as gia_thap_nhat,
-                   MAX(bsp.gia_ban) as gia_cao_nhat,
-                   SUM(bsp.so_luong_ton_kho) as tong_ton_kho,
-                   'vietnamese' as source_schema
-            FROM san_pham_chinh sp
-            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
-            LEFT JOIN bien_the_san_pham bsp ON sp.id = bsp.san_pham_id AND bsp.trang_thai = 'hoat_dong'
-            WHERE sp.san_pham_noi_bat = 1 AND sp.trang_thai = 'hoat_dong'
-            GROUP BY sp.id
-            HAVING tong_ton_kho > 0
-            ORDER BY sp.luot_xem DESC, sp.ngay_tao DESC
-            LIMIT " . intval($limit/2)
-        )->fetchAll();
-
-        // Query từ English schema
-        $en_products = $pdo->query("
-            SELECT p.*, c.name as category_name,
-                   COALESCE(p.sale_price, p.price) as gia_hien_tai,
-                   p.price as gia_thap_nhat,
-                   p.price as gia_cao_nhat,
-                   p.stock_quantity as tong_ton_kho,
-                   'english' as source_schema,
-                   p.name as ten_san_pham,
-                   p.main_image as hinh_anh_chinh,
-                   p.slug as slug,
-                   p.brand as thuong_hieu,
-                   p.price as gia_goc,
-                   p.sale_price as gia_khuyen_mai,
-                   p.is_featured as san_pham_noi_bat,
-                   0 as san_pham_moi,
-                   '' as mo_ta_ngan,
-                   0 as diem_danh_gia_tb,
-                   0 as so_luong_danh_gia,
-                   0 as luot_xem
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
-            WHERE p.is_featured = 1 AND p.status = 'active' AND p.stock_quantity > 0
-            ORDER BY p.created_at DESC
-            LIMIT " . intval($limit/2)
-        )->fetchAll();
-
-        // Merge results
-        return array_merge($vn_products, $en_products);
-    } catch (Exception $e) {
-        error_log("getUnifiedFeaturedProducts error: " . $e->getMessage());
-        return [];
-    }
-}
-
-function getUnifiedNewProducts($pdo, $limit = 8) {
-    try {
-        // Similar to featured but for new products
-        $vn_products = $
