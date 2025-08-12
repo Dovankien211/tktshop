@@ -1,322 +1,298 @@
 <?php
+// customer/product_detail.php - FINAL FIXED VERSION
 /**
- * customer/product_detail.php - UNIVERSAL PRODUCT HANDLER
- * 🔧 FIXED: Tự động detect schema và handle cả ID + SLUG từ mọi nguồn
+ * Chi tiết sản phẩm - Hỗ trợ cả bảng products và san_pham_chinh
  */
-
 session_start();
 
 require_once '../config/database.php';
 require_once '../config/config.php';
 
-// 🔧 COMPLETE: Database schema detection function
-function detectDatabaseSchema($pdo) {
-    $schema = [
-        'table' => null,
-        'fields' => [],
-        'category_table' => null,
-        'has_variants' => false
-    ];
-    
-    try {
-        // Check if san_pham_chinh exists (Vietnamese schema)
-        $stmt = $pdo->query("SHOW TABLES LIKE 'san_pham_chinh'");
-        if ($stmt->rowCount() > 0) {
-            $schema['table'] = 'san_pham_chinh';
-            $schema['category_table'] = 'danh_muc_giay';
-            $schema['has_variants'] = true;
-            
-            $schema['fields'] = [
-                'id' => 'id',
-                'name' => 'ten_san_pham',
-                'slug' => 'slug',
-                'description' => 'mo_ta_ngan',
-                'long_description' => 'mo_ta_chi_tiet',
-                'price' => 'gia_goc',
-                'sale_price' => 'gia_khuyen_mai',
-                'brand' => 'thuong_hieu',
-                'category_id' => 'danh_muc_id',
-                'image' => 'hinh_anh_chinh',
-                'gallery' => 'album_hinh_anh',
-                'status' => 'trang_thai',
-                'status_active' => 'hoat_dong',
-                'featured' => 'san_pham_noi_bat',
-                'view_count' => 'luot_xem',
-                'rating' => 'diem_danh_gia_tb',
-                'rating_count' => 'so_luong_danh_gia',
-                'created_at' => 'ngay_tao',
-                'category_name' => 'ten_danh_muc',
-                'category_slug' => 'slug'
-            ];
-        } else {
-            // Fallback to products table (English schema)
-            $schema['table'] = 'products';
-            $schema['category_table'] = 'categories';
-            $schema['has_variants'] = false;
-            
-            $schema['fields'] = [
-                'id' => 'id',
-                'name' => 'name',
-                'slug' => 'slug',
-                'description' => 'short_description',
-                'long_description' => 'description',
-                'price' => 'price',
-                'sale_price' => 'sale_price',
-                'brand' => 'brand',
-                'category_id' => 'category_id',
-                'image' => 'main_image',
-                'gallery' => 'gallery_images',
-                'status' => 'status',
-                'status_active' => 'active',
-                'featured' => 'is_featured',
-                'view_count' => 'view_count',
-                'rating' => 'rating_average',
-                'rating_count' => 'rating_count',
-                'created_at' => 'created_at',
-                'category_name' => 'name',
-                'category_slug' => 'slug',
-                'stock_quantity' => 'stock_quantity'
-            ];
-        }
-        
-        // Add missing slug column if needed
-        try {
-            $stmt = $pdo->query("SHOW COLUMNS FROM {$schema['table']} LIKE 'slug'");
-            if ($stmt->rowCount() == 0) {
-                $pdo->exec("ALTER TABLE {$schema['table']} ADD COLUMN slug VARCHAR(255) NULL AFTER {$schema['fields']['name']}");
-                
-                // Generate slugs for existing records
-                $stmt = $pdo->query("SELECT id, {$schema['fields']['name']} FROM {$schema['table']} WHERE slug IS NULL OR slug = ''");
-                $update_stmt = $pdo->prepare("UPDATE {$schema['table']} SET slug = ? WHERE id = ?");
-                
-                while ($row = $stmt->fetch()) {
-                    $slug = createSlug($row[$schema['fields']['name']]);
-                    $update_stmt->execute([$slug, $row['id']]);
-                }
-            }
-        } catch (Exception $e) {
-            error_log("Could not add/update slug column: " . $e->getMessage());
-        }
-        
-    } catch (Exception $e) {
-        error_log("Database schema detection failed: " . $e->getMessage());
-        // Default fallback
-        $schema['table'] = 'products';
-        $schema['category_table'] = 'categories';
-    }
-    
-    return $schema;
+// Nhận parameter từ URL
+$id = (int)($_GET['id'] ?? 0);
+$slug = $_GET['slug'] ?? '';
+
+if (!$id && !$slug) {
+    header('Location: products.php');
+    exit;
 }
 
-// Detect schema
-$db_schema = detectDatabaseSchema($pdo);
-$f = $db_schema['fields'];
-
-// Get parameters từ URL - flexible handling
-$id = (int)($_GET['id'] ?? 0);
-$slug = trim($_GET['slug'] ?? '');
-
-// 🔧 FLEXIBLE PRODUCT LOOKUP
 $product = null;
 $variants = [];
 $reviews = [];
 $related_products = [];
 
-// Priority: slug first, then id, then fallback
+// 🔧 LOGIC MỚI: Ưu tiên slug trước, sau đó mới đến id
 if (!empty($slug)) {
-    // Try by slug first
+    // THỬ BẢNG SAN_PHAM_CHINH TRƯỚC (vì có slug đầy đủ)
     try {
         $stmt = $pdo->prepare("
-            SELECT p.*, c.{$f['category_name']}, c.{$f['category_slug']} as category_slug,
-                   COALESCE(p.{$f['sale_price']}, p.{$f['price']}) as current_price,
+            SELECT sp.*, dm.ten_danh_muc, dm.slug as danh_muc_slug,
+                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
                    CASE 
-                       WHEN p.{$f['sale_price']} IS NOT NULL AND p.{$f['sale_price']} < p.{$f['price']} 
-                       THEN ROUND(((p.{$f['price']} - p.{$f['sale_price']}) / p.{$f['price']}) * 100, 0)
+                       WHEN sp.gia_khuyen_mai IS NOT NULL AND sp.gia_khuyen_mai < sp.gia_goc 
+                       THEN ROUND(((sp.gia_goc - sp.gia_khuyen_mai) / sp.gia_goc) * 100, 0)
                        ELSE 0
-                   END as discount_percent
-            FROM {$db_schema['table']} p
-            LEFT JOIN {$db_schema['category_table']} c ON p.{$f['category_id']} = c.id
-            WHERE p.{$f['slug']} = ? AND p.{$f['status']} = ?
+                   END as phan_tram_giam
+            FROM san_pham_chinh sp
+            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+            WHERE sp.slug = ? AND sp.trang_thai = 'hoat_dong'
         ");
-        $stmt->execute([$slug, $f['status_active']]);
+        $stmt->execute([$slug]);
         $product = $stmt->fetch();
         
         if ($product) {
-            $id = $product['id']; // Set ID for further processing
+            $product_table = 'san_pham_chinh';
+            
+            // Cập nhật lượt xem
+            $pdo->prepare("UPDATE san_pham_chinh SET luot_xem = luot_xem + 1 WHERE id = ?")->execute([$product['id']]);
+            
+            // Lấy biến thể sản phẩm
+            $stmt = $pdo->prepare("
+                SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
+                FROM bien_the_san_pham bsp
+                JOIN kich_co kc ON bsp.kich_co_id = kc.id
+                JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
+                WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
+                ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
+            ");
+            $stmt->execute([$product['id']]);
+            $variants = $stmt->fetchAll();
+            
+            // Nhóm biến thể theo size và màu
+            $sizes = [];
+            $colors = [];
+            $variant_matrix = [];
+            
+            foreach ($variants as $variant) {
+                if (!in_array($variant['kich_co'], $sizes)) {
+                    $sizes[] = $variant['kich_co'];
+                }
+                if (!isset($colors[$variant['mau_sac_id']])) {
+                    $colors[$variant['mau_sac_id']] = [
+                        'id' => $variant['mau_sac_id'],
+                        'ten_mau' => $variant['ten_mau'],
+                        'ma_mau' => $variant['ma_mau']
+                    ];
+                }
+                $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
+            }
+            
+            // Sản phẩm liên quan từ san_pham_chinh
+            $stmt = $pdo->prepare("
+                SELECT sp.*, 
+                       COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai,
+                       MIN(bsp.gia_ban) as gia_thap_nhat,
+                       SUM(bsp.so_luong_ton_kho) as tong_ton_kho
+                FROM san_pham_chinh sp
+                LEFT JOIN bien_the_san_pham bsp ON sp.id = bsp.san_pham_id AND bsp.trang_thai = 'hoat_dong'
+                WHERE sp.danh_muc_id = ? AND sp.id != ? AND sp.trang_thai = 'hoat_dong'
+                GROUP BY sp.id
+                HAVING tong_ton_kho > 0
+                ORDER BY sp.luot_xem DESC
+                LIMIT 4
+            ");
+            $stmt->execute([$product['danh_muc_id'], $product['id']]);
+            $related_products = $stmt->fetchAll();
         }
     } catch (Exception $e) {
-        error_log("Slug lookup failed: " . $e->getMessage());
+        error_log("Error querying san_pham_chinh table: " . $e->getMessage());
     }
 }
 
-// If not found by slug, try by ID
+// Nếu không tìm thấy bằng slug, thử tìm bằng id trong bảng products
 if (!$product && $id > 0) {
     try {
         $stmt = $pdo->prepare("
-            SELECT p.*, c.{$f['category_name']}, c.{$f['category_slug']} as category_slug,
-                   COALESCE(p.{$f['sale_price']}, p.{$f['price']}) as current_price,
+            SELECT p.*, c.name as category_name,
+                   COALESCE(p.sale_price, p.price) as gia_hien_tai,
                    CASE 
-                       WHEN p.{$f['sale_price']} IS NOT NULL AND p.{$f['sale_price']} < p.{$f['price']} 
-                       THEN ROUND(((p.{$f['price']} - p.{$f['sale_price']}) / p.{$f['price']}) * 100, 0)
+                       WHEN p.sale_price IS NOT NULL AND p.sale_price < p.price 
+                       THEN ROUND(((p.price - p.sale_price) / p.price) * 100, 0)
                        ELSE 0
-                   END as discount_percent
-            FROM {$db_schema['table']} p
-            LEFT JOIN {$db_schema['category_table']} c ON p.{$f['category_id']} = c.id
-            WHERE p.id = ? AND p.{$f['status']} = ?
+                   END as phan_tram_giam,
+                   p.name as ten_san_pham,
+                   p.description as mo_ta_ngan,
+                   p.description as mo_ta_chi_tiet,
+                   p.price as gia_goc,
+                   p.sale_price as gia_khuyen_mai,
+                   p.main_image as hinh_anh_chinh,
+                   p.gallery_images as album_hinh_anh,
+                   p.brand as thuong_hieu,
+                   p.category_id as danh_muc_id,
+                   p.is_featured as san_pham_noi_bat,
+                   0 as san_pham_moi,
+                   0 as san_pham_ban_chay,
+                   0 as luot_xem,
+                   0 as so_luong_ban,
+                   0 as diem_danh_gia_tb,
+                   0 as so_luong_danh_gia,
+                   c.name as ten_danh_muc,
+                   c.slug as danh_muc_slug
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.id = ? AND p.status = 'active'
         ");
-        $stmt->execute([$id, $f['status_active']]);
+        $stmt->execute([$id]);
         $product = $stmt->fetch();
+        
+        // Nếu tìm thấy trong bảng products
+        if ($product) {
+            $product_table = 'products';
+            
+            // Cập nhật lượt xem (giả lập)
+            $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity WHERE id = ?")->execute([$id]);
+            
+            // Không có biến thể cho bảng products (có thể thêm sau)
+            $variants = [];
+            $sizes = [];
+            $colors = [];
+            $variant_matrix = [];
+            
+            // Giả lập reviews rỗng
+            $reviews = [];
+            $rating_stats = [];
+            
+            // Sản phẩm liên quan từ bảng products
+            $stmt = $pdo->prepare("
+                SELECT p.*, c.name as category_name,
+                       p.name as ten_san_pham,
+                       p.main_image as hinh_anh_chinh,
+                       p.price as gia_goc,
+                       p.sale_price as gia_khuyen_mai,
+                       0 as diem_danh_gia_tb,
+                       0 as so_luong_danh_gia,
+                       p.stock_quantity as tong_ton_kho
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.category_id = ? AND p.id != ? AND p.status = 'active' AND p.stock_quantity > 0
+                ORDER BY p.created_at DESC
+                LIMIT 4
+            ");
+            $stmt->execute([$product['danh_muc_id'], $id]);
+            $related_products = $stmt->fetchAll();
+        }
     } catch (Exception $e) {
-        error_log("ID lookup failed: " . $e->getMessage());
+        error_log("Error querying products table: " . $e->getMessage());
     }
 }
 
-// If still no product found, redirect with error
+// Nếu vẫn không tìm thấy sản phẩm
 if (!$product) {
     header('Location: products.php?error=product_not_found');
     exit;
 }
 
-// 🔧 UPDATE VIEW COUNT
-try {
-    $pdo->prepare("UPDATE {$db_schema['table']} SET {$f['view_count']} = {$f['view_count']} + 1 WHERE id = ?")
-        ->execute([$product['id']]);
-} catch (Exception $e) {
-    error_log("View count update failed: " . $e->getMessage());
-}
-
-// 🔧 GET PRODUCT VARIANTS (if applicable)
-$sizes = [];
-$colors = [];
-$variant_matrix = [];
-
-if ($db_schema['has_variants']) {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT bsp.*, kc.kich_co, ms.ten_mau, ms.ma_mau
-            FROM bien_the_san_pham bsp
-            JOIN kich_co kc ON bsp.kich_co_id = kc.id
-            JOIN mau_sac ms ON bsp.mau_sac_id = ms.id
-            WHERE bsp.san_pham_id = ? AND bsp.trang_thai = 'hoat_dong'
-            ORDER BY kc.thu_tu_sap_xep, ms.thu_tu_hien_thi
-        ");
-        $stmt->execute([$product['id']]);
-        $variants = $stmt->fetchAll();
-        
-        // Build variant matrix
-        foreach ($variants as $variant) {
-            if (!in_array($variant['kich_co'], $sizes)) {
-                $sizes[] = $variant['kich_co'];
-            }
-            if (!isset($colors[$variant['mau_sac_id']])) {
-                $colors[$variant['mau_sac_id']] = [
-                    'id' => $variant['mau_sac_id'],
-                    'ten_mau' => $variant['ten_mau'],
-                    'ma_mau' => $variant['ma_mau']
-                ];
-            }
-            $variant_matrix[$variant['kich_co']][$variant['mau_sac_id']] = $variant;
-        }
-    } catch (Exception $e) {
-        error_log("Variants lookup failed: " . $e->getMessage());
-    }
-}
-
-// 🔧 GET RELATED PRODUCTS
-try {
-    if ($db_schema['has_variants']) {
-        $stmt = $pdo->prepare("
-            SELECT p.*, 
-                   COALESCE(p.{$f['sale_price']}, p.{$f['price']}) as current_price,
-                   MIN(bsp.gia_ban) as min_price,
-                   SUM(bsp.so_luong_ton_kho) as total_stock
-            FROM {$db_schema['table']} p
-            LEFT JOIN bien_the_san_pham bsp ON p.id = bsp.san_pham_id AND bsp.trang_thai = 'hoat_dong'
-            WHERE p.{$f['category_id']} = ? AND p.id != ? AND p.{$f['status']} = ?
-            GROUP BY p.id
-            HAVING total_stock > 0
-            ORDER BY p.{$f['view_count']} DESC
-            LIMIT 4
-        ");
-        $stmt->execute([$product[$f['category_id']], $product['id'], $f['status_active']]);
-    } else {
-        $stmt = $pdo->prepare("
-            SELECT p.*, c.{$f['category_name']},
-                   COALESCE(p.{$f['sale_price']}, p.{$f['price']}) as current_price
-            FROM {$db_schema['table']} p
-            LEFT JOIN {$db_schema['category_table']} c ON p.{$f['category_id']} = c.id
-            WHERE p.{$f['category_id']} = ? AND p.id != ? AND p.{$f['status']} = ?
-            AND p.{$f['stock_quantity']} > 0
-            ORDER BY p.{$f['view_count']} DESC
-            LIMIT 4
-        ");
-        $stmt->execute([$product[$f['category_id']], $product['id'], $f['status_active']]);
-    }
-    $related_products = $stmt->fetchAll();
-} catch (Exception $e) {
-    error_log("Related products lookup failed: " . $e->getMessage());
-}
-
-// 🔧 PROCESS PRODUCT IMAGES
-$product_images = [];
-if ($product[$f['gallery']]) {
-    $gallery = json_decode($product[$f['gallery']], true);
-    if (is_array($gallery)) {
-        $product_images = array_filter($gallery, function($img) {
-            return !empty($img) && $img !== 'default-product.jpg';
-        });
-    }
-}
-if ($product[$f['image']] && $product[$f['image']] !== 'default-product.jpg') {
-    array_unshift($product_images, $product[$f['image']]);
-}
-$product_images = array_unique($product_images);
-
-// 🔧 HANDLE ADD TO CART AJAX
+// Xử lý AJAX thêm vào giỏ hàng
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_to_cart') {
-    ob_clean();
+    // 🔧 FIX: Đảm bảo chỉ output JSON
+    ob_clean(); // Xóa tất cả output trước đó
     header('Content-Type: application/json');
     
-    $customer_id = $_SESSION['customer_id'] ?? null;
-    $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
-    
-    if (!$session_id && !$customer_id) {
-        $_SESSION['session_id'] = session_id();
-        $session_id = $_SESSION['session_id'];
-    }
-    
-    try {
-        if ($db_schema['has_variants']) {
-            // Handle variants
-            $kich_co = $_POST['kich_co'] ?? '';
-            $mau_sac_id = (int)($_POST['mau_sac_id'] ?? 0);
-            $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
+    if ($product_table == 'products') {
+        // Cho bảng products - thêm giỏ hàng với bien_the_id = NULL
+        $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
+        
+        if ($product['stock_quantity'] < $so_luong) {
+            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $product['stock_quantity']]);
+            exit;
+        }
+        
+        try {
+            $customer_id = $_SESSION['customer_id'] ?? null;
+            $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
             
-            if (empty($kich_co) || $mau_sac_id == 0) {
-                echo json_encode(['success' => false, 'message' => 'Vui lòng chọn size và màu sắc!']);
-                exit;
+            if (!$session_id && !$customer_id) {
+                $_SESSION['session_id'] = session_id();
+                $session_id = $_SESSION['session_id'];
             }
             
-            // Find variant
-            $selected_variant = null;
-            foreach ($variants as $variant) {
-                if ($variant['kich_co'] == $kich_co && $variant['mau_sac_id'] == $mau_sac_id) {
-                    $selected_variant = $variant;
-                    break;
+            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
+            $check_cart = $pdo->prepare("
+                SELECT * FROM gio_hang 
+                WHERE san_pham_id = ? 
+                AND (khach_hang_id = ? OR session_id = ?)
+                AND bien_the_id IS NULL
+            ");
+            $check_cart->execute([$product['id'], $customer_id, $session_id]);
+            $existing_item = $check_cart->fetch();
+            
+            if ($existing_item) {
+                // Cập nhật số lượng
+                $new_quantity = $existing_item['so_luong'] + $so_luong;
+                if ($new_quantity > $product['stock_quantity']) {
+                    echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Tối đa có thể mua: ' . $product['stock_quantity']]);
+                    exit;
                 }
+                
+                $pdo->prepare("UPDATE gio_hang SET so_luong = ?, gia_tai_thoi_diem = ? WHERE id = ?")
+                    ->execute([$new_quantity, $product['gia_hien_tai'], $existing_item['id']]);
+                
+                $message = 'Cập nhật số lượng sản phẩm thành công!';
+            } else {
+                // Thêm mới với bien_the_id = NULL
+                $pdo->prepare("
+                    INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
+                    VALUES (?, ?, ?, NULL, ?, ?, NOW())
+                ")->execute([$customer_id, $session_id, $product['id'], $so_luong, $product['gia_hien_tai']]);
+                
+                $message = 'Thêm sản phẩm vào giỏ hàng thành công!';
             }
             
-            if (!$selected_variant) {
-                echo json_encode(['success' => false, 'message' => 'Biến thể sản phẩm không tồn tại!']);
-                exit;
+            // Đếm tổng số sản phẩm trong giỏ hàng
+            $count_stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE (khach_hang_id = ? OR session_id = ?)");
+            $count_stmt->execute([$customer_id, $session_id]);
+            $cart_count = $count_stmt->fetchColumn() ?: 0;
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => $message,
+                'cart_count' => $cart_count
+            ]);
+            
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Lỗi database: ' . $e->getMessage()]);
+        }
+    } else {
+        // Logic cho san_pham_chinh với biến thể
+        $kich_co = $_POST['kich_co'] ?? '';
+        $mau_sac_id = (int)($_POST['mau_sac_id'] ?? 0);
+        $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
+        
+        if (empty($kich_co) || $mau_sac_id == 0) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng chọn size và màu sắc!']);
+            exit;
+        }
+        
+        // Tìm biến thể tương ứng
+        $selected_variant = null;
+        foreach ($variants as $variant) {
+            if ($variant['kich_co'] == $kich_co && $variant['mau_sac_id'] == $mau_sac_id) {
+                $selected_variant = $variant;
+                break;
+            }
+        }
+        
+        if (!$selected_variant) {
+            echo json_encode(['success' => false, 'message' => 'Biến thể sản phẩm không tồn tại!']);
+            exit;
+        }
+        
+        if ($selected_variant['so_luong_ton_kho'] < $so_luong) {
+            echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $selected_variant['so_luong_ton_kho']]);
+            exit;
+        }
+        
+        try {
+            $customer_id = $_SESSION['customer_id'] ?? null;
+            $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
+            
+            if (!$session_id && !$customer_id) {
+                $_SESSION['session_id'] = session_id();
+                $session_id = $_SESSION['session_id'];
             }
             
-            if ($selected_variant['so_luong_ton_kho'] < $so_luong) {
-                echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $selected_variant['so_luong_ton_kho']]);
-                exit;
-            }
-            
-            // Check existing cart item
+            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
             $check_cart = $pdo->prepare("
                 SELECT * FROM gio_hang 
                 WHERE bien_the_id = ? 
@@ -326,6 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             $existing_item = $check_cart->fetch();
             
             if ($existing_item) {
+                // Cập nhật số lượng
                 $new_quantity = $existing_item['so_luong'] + $so_luong;
                 if ($new_quantity > $selected_variant['so_luong_ton_kho']) {
                     echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Tối đa có thể mua: ' . $selected_variant['so_luong_ton_kho']]);
@@ -337,14 +314,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 
                 $message = 'Cập nhật số lượng sản phẩm thành công!';
             } else {
+                // 🔧 FIX FINAL: INSERT với đầy đủ san_pham_id và bien_the_id
                 $pdo->prepare("
                     INSERT INTO gio_hang (khach_hang_id, session_id, san_pham_id, bien_the_id, so_luong, gia_tai_thoi_diem, ngay_them)
                     VALUES (?, ?, ?, ?, ?, ?, NOW())
                 ")->execute([
                     $customer_id, 
                     $session_id, 
-                    $product['id'],
-                    $selected_variant['id'],
+                    $product['id'],              // san_pham_id từ san_pham_chinh
+                    $selected_variant['id'],     // bien_the_id từ bien_the_san_pham
                     $so_luong, 
                     $selected_variant['gia_ban']
                 ]);
@@ -352,56 +330,57 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 $message = 'Thêm sản phẩm vào giỏ hàng thành công!';
             }
             
-        } else {
-            // Handle simple products without variants
-            $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
-            
-            if ($product[$f['stock_quantity']] < $so_luong) {
-                echo json_encode(['success' => false, 'message' => 'Không đủ hàng trong kho! Còn lại: ' . $product[$f['stock_quantity']]]);
-                exit;
-            }
-            
-            // For simple products, we'll simulate adding to a simple cart table or session
-            if (!isset($_SESSION['cart'])) {
-                $_SESSION['cart'] = [];
-            }
-            
-            $cart_key = $product['id'];
-            if (isset($_SESSION['cart'][$cart_key])) {
-                $_SESSION['cart'][$cart_key]['quantity'] += $so_luong;
-            } else {
-                $_SESSION['cart'][$cart_key] = [
-                    'product_id' => $product['id'],
-                    'name' => $product[$f['name']],
-                    'price' => $product['current_price'],
-                    'quantity' => $so_luong,
-                    'image' => $product[$f['image']]
-                ];
-            }
-            
-            $message = 'Thêm sản phẩm vào giỏ hàng thành công!';
-        }
-        
-        // Count cart items
-        if ($db_schema['has_variants']) {
+            // Đếm tổng số sản phẩm trong giỏ hàng
             $count_stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE (khach_hang_id = ? OR session_id = ?)");
             $count_stmt->execute([$customer_id, $session_id]);
             $cart_count = $count_stmt->fetchColumn() ?: 0;
-        } else {
-            $cart_count = array_sum(array_column($_SESSION['cart'] ?? [], 'quantity'));
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => $message,
+                'cart_count' => $cart_count
+            ]);
+            
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
         }
-        
-        echo json_encode([
-            'success' => true, 
-            'message' => $message,
-            'cart_count' => $cart_count
-        ]);
-        
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()]);
     }
     exit;
 }
+
+// Album ảnh
+$product_images = [];
+if ($product_table == 'products') {
+    // Xử lý gallery_images cho bảng products
+    if ($product['gallery_images']) {
+        $gallery = json_decode($product['gallery_images'], true);
+        if (is_array($gallery)) {
+            $product_images = array_filter($gallery);
+        }
+    }
+    if ($product['hinh_anh_chinh']) {
+        array_unshift($product_images, $product['hinh_anh_chinh']);
+    }
+} else {
+    // Xử lý album_hinh_anh cho bảng san_pham_chinh
+    if ($product['album_hinh_anh']) {
+        $album = json_decode($product['album_hinh_anh'], true);
+        if (is_array($album)) {
+            foreach ($album as $img) {
+                if (!empty($img) && $img !== 'default-product.jpg') {
+                    $product_images[] = $img;
+                }
+            }
+        }
+    }
+    if ($product['hinh_anh_chinh'] && $product['hinh_anh_chinh'] !== 'default-product.jpg') {
+        array_unshift($product_images, $product['hinh_anh_chinh']);
+    }
+}
+
+$product_images = array_unique($product_images);
+
+$page_title = htmlspecialchars($product['ten_san_pham']) . ' - TKT Shop';
 
 // Helper functions
 function getContrastColor($hexColor) {
@@ -415,21 +394,14 @@ function getContrastColor($hexColor) {
 
 function getImageUrl($imageName) {
     if (empty($imageName) || $imageName === 'default-product.jpg') {
-        return "/tktshop/uploads/products/no-image.jpg";
+        return null;
     }
-    return "/tktshop/uploads/products/" . htmlspecialchars($imageName);
-}
-
-function getCurrentUrl() {
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-    return $protocol . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    return "/tktshop/uploads/products/" . $imageName;
 }
 
 function formatPrice($price) {
     return number_format($price, 0, ',', '.') . '₫';
 }
-
-$page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
 ?>
 
 <!DOCTYPE html>
@@ -438,11 +410,10 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $page_title ?></title>
-    <meta name="description" content="<?= htmlspecialchars($product[$f['description']] ?? '') ?>">
+    <meta name="description" content="<?= htmlspecialchars($product['mo_ta_ngan'] ?? '') ?>">
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css" rel="stylesheet">
     
     <style>
         .product-gallery {
@@ -469,6 +440,13 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             border: 2px dashed #dee2e6;
         }
         
+        .thumbnail-images {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            overflow-x: auto;
+        }
+        
         .thumbnail {
             width: 80px;
             height: 80px;
@@ -484,6 +462,16 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
         .thumbnail.active {
             opacity: 1;
             border: 2px solid #007bff;
+        }
+        
+        .variant-option {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
         }
         
         .variant-option:hover,
@@ -520,45 +508,16 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
         .quantity-input {
             max-width: 120px;
         }
-        
-        .debug-info {
-            background: #e8f4fd;
-            border: 1px solid #bee5eb;
-            border-radius: 5px;
-            padding: 10px;
-            margin: 10px 0;
-            font-size: 12px;
-        }
     </style>
 </head>
 <body>
-    <?php include 'includes/header.php'; ?>
-    
     <div class="container py-4">
-        <!-- 🔧 Debug Info -->
-        <div class="debug-info">
-            <strong>🔧 Product Detail Debug:</strong><br>
-            Database Schema: <?= $db_schema['table'] ?> (<?= $db_schema['has_variants'] ? 'with variants' : 'simple' ?>)<br>
-            Product ID: <?= $product['id'] ?><br>
-            Product Slug: <?= $product[$f['slug']] ?? 'N/A' ?><br>
-            URL Params: id=<?= $id ?>, slug=<?= htmlspecialchars($slug) ?><br>
-            Variants found: <?= count($variants) ?><br>
-            Images found: <?= count($product_images) ?><br>
-        </div>
-        
         <!-- Breadcrumb -->
         <nav aria-label="breadcrumb" class="mb-4">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="/tktshop/">Trang chủ</a></li>
                 <li class="breadcrumb-item"><a href="/tktshop/customer/products.php">Sản phẩm</a></li>
-                <?php if ($product[$f['category_name']]): ?>
-                    <li class="breadcrumb-item">
-                        <a href="/tktshop/customer/products.php?category=<?= $product[$f['category_id']] ?>">
-                            <?= htmlspecialchars($product[$f['category_name']]) ?>
-                        </a>
-                    </li>
-                <?php endif; ?>
-                <li class="breadcrumb-item active"><?= htmlspecialchars($product[$f['name']]) ?></li>
+                <li class="breadcrumb-item active"><?= htmlspecialchars($product['ten_san_pham']) ?></li>
             </ol>
         </nav>
         
@@ -569,431 +528,33 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                     <div class="position-relative">
                         <?php if (!empty($product_images)): ?>
                             <img id="mainImage" 
-                                 src="<?= getImageUrl($product_images[0]) ?>" 
-                                 alt="<?= htmlspecialchars($product[$f['name']]) ?>"
+                                 src="<?= getImageUrl($product_images[0]) ?: '/tktshop/uploads/products/no-image.jpg' ?>" 
+                                 alt="<?= htmlspecialchars($product['ten_san_pham']) ?>"
                                  class="main-image"
                                  onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
                         <?php else: ?>
                             <div class="no-image-placeholder">
                                 <div class="text-center text-muted">
-                                    <i class="fas ${iconClass} me-2"></i>
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                </div>
-            `;
-            
-            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-            const toast = new bootstrap.Toast(document.getElementById(toastId));
-            toast.show();
-            
-            // Remove toast element after it hides
-            setTimeout(() => {
-                const toastElement = document.getElementById(toastId);
-                if (toastElement) {
-                    toastElement.remove();
-                }
-            }, 5000);
-        }
-        
-        // Wishlist function
-        function addToWishlist(productId) {
-            showToast('Tính năng yêu thích sẽ được cập nhật sớm!', 'info');
-        }
-        
-        // Image zoom functionality
-        function initImageZoom() {
-            const mainImage = document.getElementById('mainImage');
-            if (mainImage) {
-                mainImage.addEventListener('click', function() {
-                    const modal = document.createElement('div');
-                    modal.className = 'modal fade';
-                    modal.innerHTML = `
-                        <div class="modal-dialog modal-lg modal-dialog-centered">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Xem ảnh chi tiết</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body text-center">
-                                    <img src="${this.src}" class="img-fluid" alt="Product Image">
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    document.body.appendChild(modal);
-                    const bootstrapModal = new bootstrap.Modal(modal);
-                    bootstrapModal.show();
-                    
-                    modal.addEventListener('hidden.bs.modal', function() {
-                        modal.remove();
-                    });
-                });
-            }
-        }
-        
-        // Quantity validation
-        function validateQuantity() {
-            const quantityInput = document.getElementById('quantity');
-            if (quantityInput) {
-                quantityInput.addEventListener('change', function() {
-                    const value = parseInt(this.value);
-                    const min = parseInt(this.min) || 1;
-                    const max = parseInt(this.max) || 999;
-                    
-                    if (value < min) {
-                        this.value = min;
-                        showToast('Số lượng tối thiểu là ' + min, 'error');
-                    } else if (value > max) {
-                        this.value = max;
-                        showToast('Số lượng tối đa là ' + max, 'error');
-                    }
-                });
-            }
-        }
-        
-        // Product sharing
-        function shareProduct(platform) {
-            const url = encodeURIComponent(window.location.href);
-            const title = encodeURIComponent(document.title);
-            let shareUrl = '';
-            
-            switch (platform) {
-                case 'facebook':
-                    shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${url}`;
-                    break;
-                case 'twitter':
-                    shareUrl = `https://twitter.com/intent/tweet?url=${url}&text=${title}`;
-                    break;
-                case 'pinterest':
-                    const image = encodeURIComponent(document.getElementById('mainImage')?.src || '');
-                    shareUrl = `https://pinterest.com/pin/create/button/?url=${url}&media=${image}&description=${title}`;
-                    break;
-                case 'copy':
-                    navigator.clipboard.writeText(window.location.href).then(() => {
-                        showToast('Đã copy link sản phẩm!', 'success');
-                    });
-                    return;
-            }
-            
-            if (shareUrl) {
-                window.open(shareUrl, '_blank', 'width=600,height=400');
-            }
-        }
-        
-        // Product comparison (future feature)
-        function addToCompare(productId) {
-            let compareList = JSON.parse(localStorage.getItem('compareProducts') || '[]');
-            
-            if (compareList.includes(productId)) {
-                showToast('Sản phẩm đã có trong danh sách so sánh', 'info');
-                return;
-            }
-            
-            if (compareList.length >= 3) {
-                showToast('Chỉ có thể so sánh tối đa 3 sản phẩm', 'error');
-                return;
-            }
-            
-            compareList.push(productId);
-            localStorage.setItem('compareProducts', JSON.stringify(compareList));
-            showToast('Đã thêm vào danh sách so sánh', 'success');
-            
-            updateCompareButton();
-        }
-        
-        function updateCompareButton() {
-            const compareList = JSON.parse(localStorage.getItem('compareProducts') || '[]');
-            const compareBtn = document.getElementById('compareBtn');
-            if (compareBtn) {
-                compareBtn.innerHTML = `<i class="fas fa-balance-scale me-1"></i>So sánh (${compareList.length})`;
-            }
-        }
-        
-        // Recently viewed products
-        function addToRecentlyViewed(productId, productName, productImage, productPrice) {
-            let recentProducts = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-            
-            // Remove if already exists
-            recentProducts = recentProducts.filter(p => p.id !== productId);
-            
-            // Add to beginning
-            recentProducts.unshift({
-                id: productId,
-                name: productName,
-                image: productImage,
-                price: productPrice,
-                viewedAt: new Date().toISOString()
-            });
-            
-            // Keep only last 10
-            recentProducts = recentProducts.slice(0, 10);
-            
-            localStorage.setItem('recentlyViewed', JSON.stringify(recentProducts));
-        }
-        
-        // Display recently viewed products
-        function displayRecentlyViewed() {
-            const recentProducts = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-            const currentProductId = <?= $product['id'] ?>;
-            
-            // Filter out current product
-            const filteredProducts = recentProducts.filter(p => p.id != currentProductId);
-            
-            if (filteredProducts.length > 0) {
-                const container = document.getElementById('recentlyViewedContainer');
-                const section = document.getElementById('recentlyViewedSection');
-                
-                let html = '';
-                filteredProducts.slice(0, 4).forEach(product => {
-                    html += `
-                        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
-                            <div class="card h-100">
-                                <img src="/tktshop/uploads/products/${product.image || 'no-image.jpg'}" 
-                                     class="card-img-top" 
-                                     alt="${product.name}"
-                                     style="height: 150px; object-fit: cover;"
-                                     onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        <a href="product_detail.php?id=${product.id}" class="text-decoration-none text-dark">
-                                            ${product.name}
-                                        </a>
-                                    </h6>
-                                    <div class="fw-bold text-primary">${formatPrice(product.price)}</div>
-                                    <small class="text-muted">Đã xem ${timeAgo(product.viewedAt)}</small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                container.innerHTML = html;
-                section.style.display = 'block';
-            }
-        }
-        
-        // Time ago helper
-        function timeAgo(dateString) {
-            const now = new Date();
-            const past = new Date(dateString);
-            const diffInSeconds = Math.floor((now - past) / 1000);
-            
-            if (diffInSeconds < 60) return 'vừa xong';
-            if (diffInSeconds < 3600) return Math.floor(diffInSeconds / 60) + ' phút trước';
-            if (diffInSeconds < 86400) return Math.floor(diffInSeconds / 3600) + ' giờ trước';
-            return Math.floor(diffInSeconds / 86400) + ' ngày trước';
-        }
-        
-        // Format price helper
-        function formatPrice(price) {
-            return new Intl.NumberFormat('vi-VN').format(price) + '₫';
-        }
-        
-        // Initialize all features
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🔧 TKT Shop Product Detail - Universal Handler loaded');
-            console.log('📊 Database Schema:', '<?= $db_schema['table'] ?>', hasVariants ? 'with variants' : 'simple');
-            console.log('📦 Product ID:', <?= $product['id'] ?>);
-            
-            <?php if ($db_schema['has_variants']): ?>
-            console.log('🎨 Variants:', <?= count($variants) ?>, 'sizes:', <?= count($sizes) ?>, 'colors:', <?= count($colors) ?>);
-            <?php endif; ?>
-            
-            // Initialize features
-            initImageZoom();
-            validateQuantity();
-            updateCompareButton();
-            displayRecentlyViewed();
-            
-            // Add to recently viewed
-            addToRecentlyViewed(
-                <?= $product['id'] ?>,
-                '<?= addslashes($product[$f['name']]) ?>',
-                '<?= addslashes($product[$f['image']] ?? '') ?>',
-                <?= $product['current_price'] ?>
-            );
-            
-            // Auto-scroll to product if coming from search
-            if (window.location.hash === '#product') {
-                document.querySelector('.product-info')?.scrollIntoView({ behavior: 'smooth' });
-            }
-            
-            // Keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Ctrl + Enter to add to cart
-                if (e.ctrlKey && e.key === 'Enter') {
-                    e.preventDefault();
-                    addToCartAjax();
-                }
-                
-                // Escape to close modals
-                if (e.key === 'Escape') {
-                    const modals = document.querySelectorAll('.modal.show');
-                    modals.forEach(modal => {
-                        const bsModal = bootstrap.Modal.getInstance(modal);
-                        if (bsModal) bsModal.hide();
-                    });
-                }
-            });
-        });
-        
-        // Handle browser back/forward
-        window.addEventListener('popstate', function(e) {
-            if (e.state && e.state.productId) {
-                // Handle product navigation without page reload
-                console.log('Navigating to product:', e.state.productId);
-            }
-        });
-        
-        // Update URL without reload when variant changes
-        function updateUrlWithVariant(size, colorId) {
-            if (history.pushState) {
-                const url = new URL(window.location);
-                if (size) url.searchParams.set('size', size);
-                if (colorId) url.searchParams.set('color', colorId);
-                
-                history.pushState({
-                    productId: <?= $product['id'] ?>,
-                    size: size,
-                    colorId: colorId
-                }, '', url);
-            }
-        }
-        
-        // SEO and Social Meta Updates
-        function updatePageMeta(productName, productImage, productPrice) {
-            // Update page title
-            document.title = productName + ' - TKT Shop';
-            
-            // Update meta description
-            const metaDesc = document.querySelector('meta[name="description"]');
-            if (metaDesc) {
-                metaDesc.content = `Mua ${productName} giá tốt tại TKT Shop. Giá: ${formatPrice(productPrice)}. Giao hàng nhanh, đổi trả dễ dàng.`;
-            }
-            
-            // Update Open Graph meta tags
-            const ogTitle = document.querySelector('meta[property="og:title"]');
-            const ogDescription = document.querySelector('meta[property="og:description"]');
-            const ogImage = document.querySelector('meta[property="og:image"]');
-            const ogUrl = document.querySelector('meta[property="og:url"]');
-            
-            if (ogTitle) ogTitle.content = productName;
-            if (ogDescription) ogDescription.content = `Mua ${productName} tại TKT Shop`;
-            if (ogImage) ogImage.content = productImage;
-            if (ogUrl) ogUrl.content = window.location.href;
-        }
-        
-        // Update page meta on load
-        updatePageMeta(
-            '<?= addslashes($product[$f['name']]) ?>',
-            '<?= getImageUrl($product[$f['image']]) ?>',
-            <?= $product['current_price'] ?>
-        );
-        
-        // Analytics tracking (placeholder for future integration)
-        function trackProductView(productId, productName, category, price) {
-            // Google Analytics 4 event
-            if (typeof gtag !== 'undefined') {
-                gtag('event', 'view_item', {
-                    currency: 'VND',
-                    value: price,
-                    items: [{
-                        item_id: productId,
-                        item_name: productName,
-                        category: category,
-                        price: price
-                    }]
-                });
-            }
-            
-            // Facebook Pixel event
-            if (typeof fbq !== 'undefined') {
-                fbq('track', 'ViewContent', {
-                    content_type: 'product',
-                    content_ids: [productId],
-                    content_name: productName,
-                    value: price,
-                    currency: 'VND'
-                });
-            }
-            
-            console.log('📊 Tracked product view:', productId, productName);
-        }
-        
-        // Track product view
-        trackProductView(
-            <?= $product['id'] ?>,
-            '<?= addslashes($product[$f['name']]) ?>',
-            '<?= addslashes($product[$f['category_name']] ?? 'Unknown') ?>',
-            <?= $product['current_price'] ?>
-        );
-    </script>
-    
-    <!-- Add Social Meta Tags -->
-    <meta property="og:type" content="product">
-    <meta property="og:title" content="<?= htmlspecialchars($product[$f['name']]) ?>">
-    <meta property="og:description" content="<?= htmlspecialchars($product[$f['description']] ?? '') ?>">
-    <meta property="og:image" content="<?= getImageUrl($product[$f['image']]) ?>">
-    <meta property="og:url" content="<?= getCurrentUrl() ?>">
-    <meta property="product:price:amount" content="<?= $product['current_price'] ?>">
-    <meta property="product:price:currency" content="VND">
-    
-    <!-- Schema.org Product Markup -->
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org/",
-        "@type": "Product",
-        "name": "<?= addslashes($product[$f['name']]) ?>",
-        "image": "<?= getImageUrl($product[$f['image']]) ?>",
-        "description": "<?= addslashes($product[$f['description']] ?? '') ?>",
-        "brand": {
-            "@type": "Brand",
-            "name": "<?= addslashes($product[$f['brand']] ?? 'TKT Shop') ?>"
-        },
-        "offers": {
-            "@type": "Offer",
-            "url": "<?= getCurrentUrl() ?>",
-            "priceCurrency": "VND",
-            "price": "<?= $product['current_price'] ?>",
-            "availability": "https://schema.org/InStock",
-            "seller": {
-                "@type": "Organization",
-                "name": "TKT Shop"
-            }
-        },
-        "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": "<?= $product[$f['rating']] ?>",
-            "reviewCount": "<?= $product[$f['rating_count']] ?>"
-        }
-    }
-    </script>
-    
-    <?php include 'includes/footer.php'; ?>
-</body>
-</html> fa-image fa-3x mb-3"></i>
+                                    <i class="fas fa-image fa-3x mb-3"></i>
                                     <p>Hình ảnh sản phẩm<br>đang được cập nhật</p>
                                 </div>
                             </div>
                         <?php endif; ?>
                         
-                        <?php if ($product['discount_percent'] > 0): ?>
-                            <span class="badge bg-danger position-absolute" style="top: 15px; right: 15px;">-<?= $product['discount_percent'] ?>%</span>
+                        <?php if ($product['phan_tram_giam'] > 0): ?>
+                            <span class="badge bg-danger position-absolute" style="top: 15px; right: 15px;">-<?= $product['phan_tram_giam'] ?>%</span>
                         <?php endif; ?>
                         
-                        <?php if ($product[$f['featured']]): ?>
+                        <?php if ($product['san_pham_noi_bat']): ?>
                             <span class="badge bg-warning text-dark position-absolute" style="top: 15px; left: 15px;">Hot</span>
                         <?php endif; ?>
                     </div>
                     
                     <?php if (count($product_images) > 1): ?>
-                        <div class="d-flex gap-2 mt-3 overflow-auto">
+                        <div class="thumbnail-images">
                             <?php foreach ($product_images as $index => $image): ?>
-                                <img src="<?= getImageUrl($image) ?>" 
-                                     alt="<?= htmlspecialchars($product[$f['name']]) ?> - Ảnh <?= $index + 1 ?>"
+                                <img src="<?= getImageUrl($image) ?: '/tktshop/uploads/products/no-image.jpg' ?>" 
+                                     alt="<?= htmlspecialchars($product['ten_san_pham']) ?> - Ảnh <?= $index + 1 ?>"
                                      class="thumbnail <?= $index === 0 ? 'active' : '' ?>"
                                      onclick="changeMainImage('<?= $image ?>', this)"
                                      onerror="this.style.display='none'">
@@ -1008,45 +569,45 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 <div class="product-info">
                     <!-- Product Title -->
                     <div class="mb-3">
-                        <?php if ($product[$f['brand']]): ?>
+                        <?php if ($product['thuong_hieu']): ?>
                             <div class="text-muted mb-2">
                                 <i class="fas fa-tag me-1"></i>
-                                <?= htmlspecialchars($product[$f['brand']]) ?>
+                                <?= htmlspecialchars($product['thuong_hieu']) ?>
                             </div>
                         <?php endif; ?>
-                        <h1 class="h3"><?= htmlspecialchars($product[$f['name']]) ?></h1>
+                        <h1 class="h3"><?= htmlspecialchars($product['ten_san_pham']) ?></h1>
                     </div>
                     
                     <!-- Rating -->
                     <div class="d-flex align-items-center mb-3">
                         <div class="text-warning me-2">
                             <?php for ($i = 1; $i <= 5; $i++): ?>
-                                <i class="fas fa-star<?= $i <= floor($product[$f['rating']]) ? '' : ' text-muted' ?>"></i>
+                                <i class="fas fa-star<?= $i <= floor($product['diem_danh_gia_tb']) ? '' : ' text-muted' ?>"></i>
                             <?php endfor; ?>
                         </div>
-                        <span class="me-2"><?= number_format($product[$f['rating']], 1) ?></span>
+                        <span class="me-2"><?= number_format($product['diem_danh_gia_tb'], 1) ?></span>
                         <span class="text-muted">
-                            (<?= $product[$f['rating_count']] ?> đánh giá)
+                            (<?= $product['so_luong_danh_gia'] ?> đánh giá)
                         </span>
                     </div>
                     
                     <!-- Price -->
                     <div class="price-section">
                         <div class="d-flex align-items-center gap-3 flex-wrap">
-                            <?php if ($product[$f['sale_price']] && $product[$f['sale_price']] < $product[$f['price']]): ?>
-                                <div class="h4 text-danger mb-0"><?= formatPrice($product[$f['sale_price']]) ?></div>
-                                <div class="text-muted text-decoration-line-through"><?= formatPrice($product[$f['price']]) ?></div>
-                                <div class="badge bg-danger">Tiết kiệm <?= formatPrice($product[$f['price']] - $product[$f['sale_price']]) ?></div>
+                            <?php if ($product['gia_khuyen_mai'] && $product['gia_khuyen_mai'] < $product['gia_goc']): ?>
+                                <div class="h4 text-danger mb-0"><?= formatPrice($product['gia_khuyen_mai']) ?></div>
+                                <div class="text-muted text-decoration-line-through"><?= formatPrice($product['gia_goc']) ?></div>
+                                <div class="badge bg-danger">Tiết kiệm <?= formatPrice($product['gia_goc'] - $product['gia_khuyen_mai']) ?></div>
                             <?php else: ?>
-                                <div class="h4 text-primary mb-0"><?= formatPrice($product[$f['price']]) ?></div>
+                                <div class="h4 text-primary mb-0"><?= formatPrice($product['gia_goc']) ?></div>
                             <?php endif; ?>
                         </div>
                     </div>
                     
                     <!-- Short Description -->
-                    <?php if ($product[$f['description']]): ?>
+                    <?php if ($product['mo_ta_ngan']): ?>
                         <div class="mb-4">
-                            <p class="text-muted"><?= nl2br(htmlspecialchars($product[$f['description']])) ?></p>
+                            <p class="text-muted"><?= nl2br(htmlspecialchars($product['mo_ta_ngan'])) ?></p>
                         </div>
                     <?php endif; ?>
                     
@@ -1054,8 +615,8 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                     <form method="POST" id="addToCartForm">
                         <input type="hidden" name="action" value="add_to_cart">
                         
-                        <?php if ($db_schema['has_variants'] && !empty($variants)): ?>
-                            <!-- Size Selection -->
+                        <?php if ($product_table == 'san_pham_chinh' && !empty($variants)): ?>
+                            <!-- Variant Selection cho san_pham_chinh -->
                             <?php if (!empty($sizes)): ?>
                                 <div class="mb-4">
                                     <label class="form-label fw-bold">Kích cỡ:</label>
@@ -1070,7 +631,6 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                                 </div>
                             <?php endif; ?>
                             
-                            <!-- Color Selection -->
                             <?php if (!empty($colors)): ?>
                                 <div class="mb-4">
                                     <label class="form-label fw-bold">Màu sắc:</label>
@@ -1097,48 +657,28 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                             <div class="d-flex align-items-center gap-3">
                                 <div class="input-group quantity-input">
                                     <button class="btn btn-outline-secondary" type="button" onclick="changeQuantity(-1)">-</button>
-                                    <input type="number" class="form-control text-center" name="so_luong" id="quantity" value="1" min="1" max="99">
+                                    <input type="number" class="form-control text-center" name="so_luong" id="quantity" value="1" min="1" max="<?= $product_table == 'products' ? $product['stock_quantity'] : 99 ?>">
                                     <button class="btn btn-outline-secondary" type="button" onclick="changeQuantity(1)">+</button>
                                 </div>
-                                <?php if (!$db_schema['has_variants'] && isset($product[$f['stock_quantity']])): ?>
-                                    <small class="text-muted">Còn lại: <?= $product[$f['stock_quantity']] ?></small>
+                                <?php if ($product_table == 'products'): ?>
+                                    <small class="text-muted">Còn lại: <?= $product['stock_quantity'] ?></small>
                                 <?php endif; ?>
                             </div>
                         </div>
                         
                         <!-- Add to Cart Button -->
                         <div class="d-grid gap-2 d-md-flex">
-                            <button type="button" class="btn btn-primary btn-lg flex-grow-1" id="addToCartBtn" onclick="addToCartAjax()">
+                            <button type="button" name="add_to_cart" class="btn btn-primary btn-lg flex-grow-1" id="addToCartBtn" onclick="addToCartAjax()">
                                 <i class="fas fa-shopping-cart me-2"></i>
                                 Thêm vào giỏ hàng
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-lg" onclick="addToWishlist(<?= $product['id'] ?>)">
                                 <i class="fas fa-heart"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-info btn-lg" id="compareBtn" onclick="addToCompare(<?= $product['id'] ?>)">
-                                <i class="fas fa-balance-scale"></i>
-                            </button>
-                        </div>
-                        
-                        <!-- Social Sharing -->
-                        <div class="mt-3">
-                            <small class="text-muted me-2">Chia sẻ:</small>
-                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="shareProduct('facebook')">
-                                <i class="fab fa-facebook-f"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-info me-1" onclick="shareProduct('twitter')">
-                                <i class="fab fa-twitter"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger me-1" onclick="shareProduct('pinterest')">
-                                <i class="fab fa-pinterest"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="shareProduct('copy')">
-                                <i class="fas fa-link"></i>
-                            </button>
                         </div>
                     </form>
                     
-                    <!-- Product Info Icons -->
+                    <!-- Product Info -->
                     <div class="mt-4">
                         <div class="row g-3">
                             <div class="col-6">
@@ -1191,9 +731,9 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                     <!-- Description Tab -->
                     <div class="tab-pane fade show active" id="description" role="tabpanel">
                         <div class="p-4">
-                            <?php if ($product[$f['long_description']]): ?>
+                            <?php if ($product['mo_ta_chi_tiet']): ?>
                                 <div class="product-description">
-                                    <?= nl2br(htmlspecialchars($product[$f['long_description']])) ?>
+                                    <?= nl2br(htmlspecialchars($product['mo_ta_chi_tiet'])) ?>
                                 </div>
                             <?php else: ?>
                                 <p class="text-muted">Chưa có mô tả chi tiết cho sản phẩm này.</p>
@@ -1206,24 +746,24 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                         <div class="p-4">
                             <div class="table-responsive">
                                 <table class="table table-borderless">
-                                    <?php if ($product[$f['brand']]): ?>
+                                    <?php if ($product['thuong_hieu']): ?>
                                         <tr>
                                             <td class="fw-bold" style="width: 200px;">Thương hiệu:</td>
-                                            <td><?= htmlspecialchars($product[$f['brand']]) ?></td>
+                                            <td><?= htmlspecialchars($product['thuong_hieu']) ?></td>
                                         </tr>
                                     <?php endif; ?>
                                     <tr>
                                         <td class="fw-bold">Tên sản phẩm:</td>
-                                        <td><?= htmlspecialchars($product[$f['name']]) ?></td>
+                                        <td><?= htmlspecialchars($product['ten_san_pham']) ?></td>
                                     </tr>
                                     <tr>
                                         <td class="fw-bold">Danh mục:</td>
-                                        <td><?= htmlspecialchars($product[$f['category_name']] ?? 'Chưa phân loại') ?></td>
+                                        <td><?= htmlspecialchars($product['ten_danh_muc'] ?? 'Chưa phân loại') ?></td>
                                     </tr>
-                                    <?php if (!$db_schema['has_variants'] && isset($product[$f['stock_quantity']])): ?>
+                                    <?php if ($product_table == 'products'): ?>
                                         <tr>
                                             <td class="fw-bold">Tồn kho:</td>
-                                            <td><?= $product[$f['stock_quantity']] ?> sản phẩm</td>
+                                            <td><?= $product['stock_quantity'] ?> sản phẩm</td>
                                         </tr>
                                     <?php else: ?>
                                         <?php if (!empty($sizes)): ?>
@@ -1263,14 +803,14 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                             <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
                                 <div class="card h-100">
                                     <div class="position-relative">
-                                        <img src="<?= getImageUrl($related[$f['image']]) ?>" 
+                                        <img src="<?= !empty($related['hinh_anh_chinh']) ? '/tktshop/uploads/products/' . htmlspecialchars($related['hinh_anh_chinh']) : '/tktshop/uploads/products/no-image.jpg' ?>" 
                                              class="card-img-top" 
-                                             alt="<?= htmlspecialchars($related[$f['name']]) ?>"
+                                             alt="<?= htmlspecialchars($related['ten_san_pham']) ?>"
                                              style="height: 200px; object-fit: cover;"
                                              onerror="this.src='/tktshop/uploads/products/no-image.jpg'">
                                         
-                                        <?php if ($related[$f['sale_price']] && $related[$f['sale_price']] < $related[$f['price']]): ?>
-                                            <?php $discount = round((($related[$f['price']] - $related[$f['sale_price']]) / $related[$f['price']]) * 100); ?>
+                                        <?php if ($related['gia_khuyen_mai'] && $related['gia_khuyen_mai'] < $related['gia_goc']): ?>
+                                            <?php $discount = round((($related['gia_goc'] - $related['gia_khuyen_mai']) / $related['gia_goc']) * 100); ?>
                                             <span class="badge bg-danger position-absolute" style="top: 10px; right: 10px;">
                                                 -<?= $discount ?>%
                                             </span>
@@ -1279,39 +819,32 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                                     
                                     <div class="card-body d-flex flex-column">
                                         <h6 class="card-title">
-                                            <?php
-                                            $related_url = !empty($related[$f['slug']]) 
-                                                ? "product_detail.php?slug=" . urlencode($related[$f['slug']]) 
-                                                : "product_detail.php?id=" . $related['id'];
-                                            ?>
-                                            <a href="<?= $related_url ?>" class="text-decoration-none text-dark">
-                                                <?= htmlspecialchars($related[$f['name']]) ?>
-                                            </a>
+                                            <?php if ($product_table == 'products'): ?>
+                                                <a href="product_detail.php?id=<?= $related['id'] ?>" class="text-decoration-none text-dark">
+                                                    <?= htmlspecialchars($related['ten_san_pham']) ?>
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="product_detail.php?slug=<?= $related['slug'] ?>" class="text-decoration-none text-dark">
+                                                    <?= htmlspecialchars($related['ten_san_pham']) ?>
+                                                </a>
+                                            <?php endif; ?>
                                         </h6>
                                         
                                         <div class="mt-auto">
                                             <div class="d-flex align-items-center justify-content-between">
                                                 <div>
-                                                    <?php if ($related[$f['sale_price']] && $related[$f['sale_price']] < $related[$f['price']]): ?>
-                                                        <div class="fw-bold text-danger"><?= formatPrice($related[$f['sale_price']]) ?></div>
-                                                        <small class="text-muted text-decoration-line-through"><?= formatPrice($related[$f['price']]) ?></small>
+                                                    <?php if ($related['gia_khuyen_mai'] && $related['gia_khuyen_mai'] < $related['gia_goc']): ?>
+                                                        <div class="fw-bold text-danger"><?= formatPrice($related['gia_khuyen_mai']) ?></div>
+                                                        <small class="text-muted text-decoration-line-through"><?= formatPrice($related['gia_goc']) ?></small>
                                                     <?php else: ?>
-                                                        <div class="fw-bold text-primary"><?= formatPrice($related[$f['price']]) ?></div>
+                                                        <div class="fw-bold text-primary"><?= formatPrice($related['gia_goc']) ?></div>
                                                     <?php endif; ?>
                                                 </div>
                                                 <div>
-                                                    <?php if ($db_schema['has_variants']): ?>
-                                                        <?php if (isset($related['total_stock']) && $related['total_stock'] > 0): ?>
-                                                            <small class="text-success">Còn hàng</small>
-                                                        <?php else: ?>
-                                                            <small class="text-danger">Hết hàng</small>
-                                                        <?php endif; ?>
+                                                    <?php if ($related['tong_ton_kho'] > 0): ?>
+                                                        <small class="text-success">Còn hàng</small>
                                                     <?php else: ?>
-                                                        <?php if (isset($related[$f['stock_quantity']]) && $related[$f['stock_quantity']] > 0): ?>
-                                                            <small class="text-success">Còn hàng</small>
-                                                        <?php else: ?>
-                                                            <small class="text-danger">Hết hàng</small>
-                                                        <?php endif; ?>
+                                                        <small class="text-danger">Hết hàng</small>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
@@ -1324,26 +857,17 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 </div>
             </div>
         <?php endif; ?>
-        
-        <!-- Recently Viewed Products Section -->
-        <div class="row mt-5" id="recentlyViewedSection" style="display: none;">
-            <div class="col-12">
-                <h3 class="mb-4">Sản phẩm đã xem</h3>
-                <div class="row" id="recentlyViewedContainer">
-                    <!-- Will be populated by JavaScript -->
-                </div>
-            </div>
-        </div>
     </div>
     
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Variables from PHP
-        const hasVariants = <?= $db_schema['has_variants'] ? 'true' : 'false' ?>;
+        // Variables based on product table
+        const productTable = '<?= $product_table ?>';
         
-        <?php if ($db_schema['has_variants'] && !empty($variant_matrix)): ?>
+        <?php if ($product_table == 'san_pham_chinh' && !empty($variant_matrix)): ?>
+        // Variant matrix for san_pham_chinh
         const variantMatrix = <?= json_encode($variant_matrix) ?>;
         const colors = <?= json_encode(array_values($colors)) ?>;
         
@@ -1404,10 +928,8 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 
                 if (hasVariant && variantMatrix[selectedSize][colorId].so_luong_ton_kho > 0) {
                     colorOption.classList.remove('disabled');
-                    colorOption.style.opacity = '1';
                 } else {
                     colorOption.classList.add('disabled');
-                    colorOption.style.opacity = '0.3';
                 }
             });
         }
@@ -1421,10 +943,8 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 
                 if (hasVariant && variantMatrix[size][selectedColorId].so_luong_ton_kho > 0) {
                     sizeOption.classList.remove('disabled');
-                    sizeOption.style.opacity = '1';
                 } else {
                     sizeOption.classList.add('disabled');
-                    sizeOption.style.opacity = '0.3';
                 }
             });
         }
@@ -1441,11 +961,9 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                     quantityInput.max = currentVariant.so_luong_ton_kho;
                 } else {
                     addToCartBtn.disabled = true;
-                    addToCartBtn.innerHTML = '<i class="fas fa-ban me-2"></i>Hết hàng';
                 }
             } else {
                 addToCartBtn.disabled = true;
-                addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Chọn size và màu';
             }
         }
         <?php endif; ?>
@@ -1473,9 +991,9 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
         
         // AJAX Add to Cart
         function addToCartAjax() {
-            console.log('🛒 Adding to cart...');
+            console.log('🛒 Adding to cart, product table:', productTable);
             
-            <?php if ($db_schema['has_variants']): ?>
+            <?php if ($product_table == 'san_pham_chinh'): ?>
             if (!selectedSize || !selectedColorId) {
                 showToast('Vui lòng chọn size và màu sắc!', 'error');
                 return;
@@ -1500,7 +1018,7 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
             formData.append('action', 'add_to_cart');
             formData.append('so_luong', quantity);
             
-            <?php if ($db_schema['has_variants']): ?>
+            <?php if ($product_table == 'san_pham_chinh'): ?>
             formData.append('kich_co', selectedSize);
             formData.append('mau_sac_id', selectedColorId);
             <?php endif; ?>
@@ -1516,11 +1034,7 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 
                 if (data.success) {
                     showToast(data.message, 'success');
-                    
-                    // Update cart count in header
-                    if (data.cart_count && document.getElementById('cart-count')) {
-                        document.getElementById('cart-count').textContent = data.cart_count;
-                    }
+                    // Có thể cập nhật giỏ hàng counter ở đây
                 } else {
                     showToast(data.message, 'error');
                 }
@@ -1537,6 +1051,7 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
         
         // Show toast notification
         function showToast(message, type = 'info') {
+            // Create toast container if it doesn't exist
             let toastContainer = document.getElementById('toastContainer');
             if (!toastContainer) {
                 toastContainer = document.createElement('div');
@@ -1554,14 +1069,31 @@ $page_title = htmlspecialchars($product[$f['name']]) . ' - TKT Shop';
                 <div id="${toastId}" class="toast align-items-center text-white ${bgClass} border-0" role="alert">
                     <div class="d-flex">
                         <div class="toast-body">
-                            <i class="fasoption {
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 10px 15px;
-            margin: 5px;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-block;
+                            <i class="fas ${iconClass} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toast = new bootstrap.Toast(document.getElementById(toastId));
+            toast.show();
+            
+            // Remove toast element after it hides
+            setTimeout(() => {
+                const toastElement = document.getElementById(toastId);
+                if (toastElement) {
+                    toastElement.remove();
+                }
+            }, 5000);
         }
         
-        .variant-
+        // Wishlist function
+        function addToWishlist(productId) {
+            showToast('Tính năng yêu thích sẽ được cập nhật sớm!', 'info');
+        }
+    </script>
+</body>
+</html>
