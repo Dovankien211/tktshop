@@ -1,276 +1,326 @@
-// Newsletter form
-    document.getElementById('newsletterForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const email = this.querySelector('input[type="email"]').value;
-        
-        // TODO: Implement newsletter subscription
-        alert('Cảm ơn bạn đã đăng ký! Chúng tôi sẽ gửi thông tin mới nhất đến email của bạn.');
-        
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('newsletterModal'));
-        modal.hide();
-        
-        // Clear form
-        this.reset();
-    });
-    
-    // Show newsletter modal after<?php
-// customer/includes/footer.php - FIXED LINKS VERSION
+<?php
+// customer/includes/header.php - FIXED CART LINKS VERSION
 /**
- * Footer chung cho website khách hàng
- * 🔧 FIXED: Tất cả link products.php → products_fixed.php
+ * Header chung cho website khách hàng - ĐÃ SỬA TẤT CẢ CART LINKS
+ * 🔧 FIXED: Tất cả link cart.php → cart_fixed.php
  */
+
+// Lấy danh mục chính cho menu
+$main_categories = $pdo->query("
+    SELECT dm.*, 
+           COUNT(sp.id) as so_san_pham
+    FROM danh_muc_giay dm
+    LEFT JOIN san_pham_chinh sp ON dm.id = sp.danh_muc_id AND sp.trang_thai = 'hoat_dong'
+    WHERE dm.trang_thai = 'hoat_dong' AND dm.danh_muc_cha_id IS NULL
+    GROUP BY dm.id
+    HAVING so_san_pham > 0
+    ORDER BY dm.thu_tu_hien_thi ASC
+    LIMIT 8
+")->fetchAll();
+
+// Đếm số lượng sản phẩm trong giỏ hàng
+$cart_count = 0;
+if (isset($_SESSION['customer_id'])) {
+    $stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE khach_hang_id = ?");
+    $stmt->execute([$_SESSION['customer_id']]);
+    $cart_count = $stmt->fetchColumn() ?: 0;
+} elseif (isset($_SESSION['session_id'])) {
+    $stmt = $pdo->prepare("SELECT SUM(so_luong) FROM gio_hang WHERE session_id = ?");
+    $stmt->execute([$_SESSION['session_id']]);
+    $cart_count = $stmt->fetchColumn() ?: 0;
+}
 ?>
 
-<!-- Footer -->
-<footer class="bg-dark text-white py-5 mt-5">
+<!-- Top Bar -->
+<div class="bg-primary text-white py-2">
     <div class="container">
-        <div class="row">
-            <!-- Thông tin công ty -->
-            <div class="col-lg-4 col-md-6 mb-4">
-                <h5 class="fw-bold mb-3">
-                    <i class="fas fa-store me-2"></i>
-                    <?= SITE_NAME ?>
-                </h5>
-                <p class="text-light">
-                    Chuyên cung cấp giày thể thao chính hãng từ các thương hiệu nổi tiếng thế giới. 
-                    Chất lượng đảm bảo, giá cả hợp lý, dịch vụ tận tâm.
-                </p>
-                <div class="d-flex gap-3">
-                    <a href="#" class="text-white fs-4" title="Facebook">
-                        <i class="fab fa-facebook"></i>
-                    </a>
-                    <a href="#" class="text-white fs-4" title="Instagram">
-                        <i class="fab fa-instagram"></i>
-                    </a>
-                    <a href="#" class="text-white fs-4" title="YouTube">
-                        <i class="fab fa-youtube"></i>
-                    </a>
-                    <a href="#" class="text-white fs-4" title="TikTok">
-                        <i class="fab fa-tiktok"></i>
-                    </a>
-                </div>
-            </div>
-            
-            <!-- Danh mục sản phẩm -->
-            <div class="col-lg-2 col-md-3 col-6 mb-4">
-                <h6 class="fw-bold mb-3">Sản phẩm</h6>
-                <ul class="list-unstyled">
-                    <?php 
-                    $footer_categories = $pdo->query("
-                        SELECT id, ten_danh_muc 
-                        FROM danh_muc_giay 
-                        WHERE trang_thai = 'hoat_dong' AND danh_muc_cha_id IS NULL
-                        ORDER BY thu_tu_hien_thi ASC 
-                        LIMIT 6
-                    ")->fetchAll();
-                    
-                    foreach ($footer_categories as $cat): 
-                    ?>
-                        <li class="mb-2">
-                            <!-- 🔧 FIXED: products.php → products_fixed.php -->
-                            <a href="/tktshop/customer/products_fixed.php?category=<?= $cat['id'] ?>" 
-                               class="text-light text-decoration-none hover-primary">
-                                <?= htmlspecialchars($cat['ten_danh_muc']) ?>
-                            </a>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            </div>
-            
-            <!-- Thương hiệu -->
-            <div class="col-lg-2 col-md-3 col-6 mb-4">
-                <h6 class="fw-bold mb-3">Thương hiệu</h6>
-                <ul class="list-unstyled">
-                    <!-- 🔧 FIXED: Tất cả products.php → products_fixed.php -->
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/products_fixed.php?brand=Nike" class="text-light text-decoration-none hover-primary">Nike</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/products_fixed.php?brand=Adidas" class="text-light text-decoration-none hover-primary">Adidas</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/products_fixed.php?brand=Converse" class="text-light text-decoration-none hover-primary">Converse</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/products_fixed.php?brand=Vans" class="text-light text-decoration-none hover-primary">Vans</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/products_fixed.php?brand=Puma" class="text-light text-decoration-none hover-primary">Puma</a>
-                    </li>
-                </ul>
-            </div>
-            
-            <!-- Hỗ trợ khách hàng -->
-            <div class="col-lg-2 col-md-6 mb-4">
-                <h6 class="fw-bold mb-3">Hỗ trợ</h6>
-                <ul class="list-unstyled">
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn mua hàng</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/size-guide.php" class="text-light text-decoration-none hover-primary">Hướng dẫn chọn size</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/policy.php" class="text-light text-decoration-none hover-primary">Chính sách đổi trả</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/warranty.php" class="text-light text-decoration-none hover-primary">Chính sách bảo hành</a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="/tktshop/customer/contact.php" class="text-light text-decoration-none hover-primary">Liên hệ hỗ trợ</a>
-                    </li>
-                </ul>
-            </div>
-            
-            <!-- Thông tin liên hệ -->
-            <div class="col-lg-2 col-md-6 mb-4">
-                <h6 class="fw-bold mb-3">Liên hệ</h6>
-                <div class="text-light">
-                    <p class="mb-2">
-                        <i class="fas fa-map-marker-alt me-2"></i>
-                        số nhà 17 ngõ 89, xã hoài đức, hà nội<br>
-                        <span class="ms-4">TP. Hà Nội</span>
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-phone me-2"></i>
-                        <a href="tel:0866792996" class="text-light text-decoration-none">
-                            (0866) 792996
-                        </a>
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-envelope me-2"></i>
-                        <a href="mailto:Dovankien072211@gmail.com" class="text-light text-decoration-none">
-                            Dovankien072211@gmail.com
-                        </a>
-                    </p>
-                    <p class="mb-0">
-                        <i class="fas fa-clock me-2"></i>
-                        8:00 - 22:00 (Hàng ngày)
-                    </p>
-                </div>
-                
-                <!-- Phương thức thanh toán -->
-                <div class="mt-3">
-                    <h6 class="fw-bold mb-2">Thanh toán</h6>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <div class="bg-white p-2 rounded d-flex align-items-center" style="min-width: 60px; height: 35px;">
-                            <img src="/tktshop/assets/images/vnpay-logo.png" alt="VNPay" style="max-height: 20px; width: auto;" onerror="this.style.display='none'">
-                        </div>
-                        <div class="bg-white p-2 rounded d-flex align-items-center justify-content-center" style="min-width: 60px; height: 35px;">
-                            <span class="fw-bold text-dark" style="font-size: 0.8rem;">COD</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Đường phân cách -->
-        <hr class="my-4 border-light">
-        
-        <!-- Footer bottom -->
         <div class="row align-items-center">
             <div class="col-md-6">
-                <p class="text-light mb-0">
-                    &copy; <?= date('Y') ?> <?= SITE_NAME ?>. Tất cả quyền được bảo lưu.
-                </p>
+                <small>
+                    <i class="fas fa-phone me-2"></i>(0866) 792996
+                    <span class="ms-4">
+                        <i class="fas fa-envelope me-2"></i>Dovankien072211@gmail.com
+                    </span>
+                </small>
             </div>
             <div class="col-md-6 text-md-end">
-                <div class="d-flex justify-content-md-end gap-3 mt-2 mt-md-0">
-                    <a href="/tktshop/customer/terms.php" class="text-light text-decoration-none hover-primary">
-                        Điều khoản sử dụng
-                    </a>
-                    <a href="/tktshop/customer/privacy.php" class="text-light text-decoration-none hover-primary">
-                        Chính sách bảo mật
-                    </a>
-                    <a href="/tktshop/customer/sitemap.php" class="text-light text-decoration-none hover-primary">
-                        Sơ đồ trang web
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</footer>
-
-<!-- Newsletter Modal -->
-<div class="modal fade" id="newsletterModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header border-0">
-                <h5 class="modal-title">
-                    <i class="fas fa-envelope-open-text text-primary me-2"></i>
-                    Đăng ký nhận tin
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted">Đăng ký để nhận thông tin về sản phẩm mới và ưu đãi đặc biệt!</p>
-                <form id="newsletterForm">
-                    <div class="input-group">
-                        <input type="email" class="form-control" placeholder="Nhập email của bạn..." required>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-paper-plane"></i> Đăng ký
-                        </button>
-                    </div>
-                </form>
+                <small>
+                    <i class="fas fa-shipping-fast me-2"></i>Miễn phí vận chuyển cho đơn hàng trên 500k
+                </small>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Back to top button -->
-<button id="backToTop" class="btn btn-primary position-fixed" 
-        style="bottom: 30px; right: 30px; z-index: 1000; display: none; width: 50px; height: 50px; border-radius: 50%;">
-    <i class="fas fa-chevron-up"></i>
-</button>
+<!-- Main Header -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+    <div class="container">
+        <!-- Logo -->
+        <a class="navbar-brand fw-bold fs-3" href="/tktshop/customer/">
+            <i class="fas fa-store text-primary me-2"></i>
+            <span class="text-primary"><?= SITE_NAME ?></span>
+        </a>
+        
+        <!-- Mobile Toggle -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <!-- Main Menu -->
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'index.php' ? 'active' : '' ?>" href="/tktshop/customer/">
+                        <i class="fas fa-home me-1"></i>Trang chủ
+                    </a>
+                </li>
+                
+                <!-- ✅ SỬA: products.php → products_fixed.php -->
+                <li class="nav-item">
+                    <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'products_fixed.php' ? 'active' : '' ?>" href="/tktshop/customer/products_fixed.php">
+                        <i class="fas fa-shopping-bag me-1"></i>Sản phẩm
+                    </a>
+                </li>
+                
+                <!-- Categories Dropdown -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="categoriesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-tags me-1"></i>Danh mục
+                    </a>
+                    <ul class="dropdown-menu">
+                        <!-- ✅ SỬA: products.php → products_fixed.php -->
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php">
+                            <i class="fas fa-th-large me-2"></i>Tất cả sản phẩm
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <?php foreach ($main_categories as $category): ?>
+                            <!-- ✅ SỬA: products.php → products_fixed.php -->
+                            <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?category=<?= $category['id'] ?>">
+                                <i class="fas fa-angle-right me-2"></i>
+                                <?= htmlspecialchars($category['ten_danh_muc']) ?>
+                                <span class="badge bg-light text-dark ms-2"><?= $category['so_san_pham'] ?></span>
+                            </a></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </li>
+                
+                <!-- Brands -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="brandsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-star me-1"></i>Thương hiệu
+                    </a>
+                    <ul class="dropdown-menu">
+                        <!-- ✅ SỬA: Tất cả products.php → products_fixed.php -->
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Nike">
+                            <i class="fas fa-angle-right me-2"></i>Nike
+                        </a></li>
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Adidas">
+                            <i class="fas fa-angle-right me-2"></i>Adidas
+                        </a></li>
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Converse">
+                            <i class="fas fa-angle-right me-2"></i>Converse
+                        </a></li>
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Vans">
+                            <i class="fas fa-angle-right me-2"></i>Vans
+                        </a></li>
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Puma">
+                            <i class="fas fa-angle-right me-2"></i>Puma
+                        </a></li>
+                    </ul>
+                </li>
+            </ul>
+            
+            <!-- Search Form -->
+            <!-- ✅ SỬA: products.php → products_fixed.php -->
+            <form class="d-flex me-3" action="/tktshop/customer/products_fixed.php" method="GET">
+                <div class="input-group" style="width: 300px;">
+                    <input class="form-control" 
+                           type="search" 
+                           name="search" 
+                           placeholder="Tìm kiếm sản phẩm..." 
+                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>"
+                           autocomplete="off">
+                    <button class="btn btn-outline-primary" type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+            
+            <!-- User Actions -->
+            <div class="d-flex align-items-center gap-3">
+                <!-- Shopping Cart -->
+                <!-- 🔧 CRITICAL FIX: cart.php → cart_fixed.php -->
+                <a href="/tktshop/customer/cart_fixed.php" class="text-decoration-none position-relative" title="Giỏ hàng">
+                    <i class="fas fa-shopping-cart fs-5 text-muted hover-primary"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary" id="cart-count" style="font-size: 0.7rem;">
+                        <?= $cart_count ?>
+                    </span>
+                </a>
+                
+                <!-- User Menu -->
+                <?php if (isset($_SESSION['customer_id'])): ?>
+                    <div class="dropdown">
+                        <a class="text-decoration-none dropdown-toggle d-flex align-items-center" 
+                           href="#" 
+                           role="button" 
+                           data-bs-toggle="dropdown" 
+                           aria-expanded="false">
+                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 35px; height: 35px;">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <span class="text-dark"><?= htmlspecialchars($_SESSION['customer_name']) ?></span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">Tài khoản của tôi</h6></li>
+                            <li><a class="dropdown-item" href="/tktshop/customer/orders.php">
+                                <i class="fas fa-shopping-bag me-2"></i>Đơn hàng của tôi
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="/tktshop/customer/logout.php">
+                                <i class="fas fa-sign-out-alt me-2"></i>Đăng xuất
+                            </a></li>
+                        </ul>
+                    </div>
+                <?php else: ?>
+                    <div class="d-flex gap-2">
+                        <a href="/tktshop/customer/login.php" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-sign-in-alt me-1"></i>Đăng nhập
+                        </a>
+                        <a href="/tktshop/customer/register.php" class="btn btn-primary btn-sm">
+                            <i class="fas fa-user-plus me-1"></i>Đăng ký
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Hot Deals Banner (Optional) -->
+<?php
+// Kiểm tra có khuyến mãi hot không
+$hot_deal = $pdo->query("
+    SELECT * FROM san_pham_chinh 
+    WHERE gia_khuyen_mai IS NOT NULL 
+    AND gia_khuyen_mai < gia_goc 
+    AND trang_thai = 'hoat_dong'
+    AND ((ngay_bat_dau_km IS NULL OR ngay_bat_dau_km <= NOW()) 
+    AND (ngay_ket_thuc_km IS NULL OR ngay_ket_thuc_km >= NOW()))
+    ORDER BY ((gia_goc - gia_khuyen_mai) / gia_goc) DESC
+    LIMIT 1
+")->fetch();
+
+if ($hot_deal && rand(1, 100) <= 30): // 30% chance hiển thị banner
+?>
+<div class="bg-warning text-dark py-2" id="hotDealBanner">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-10">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-fire text-danger me-2 fa-lg"></i>
+                    <strong>Hot Deal:</strong>
+                    <span class="ms-2">
+                        <?= htmlspecialchars($hot_deal['ten_san_pham']) ?> 
+                        - Giảm <?= round((($hot_deal['gia_goc'] - $hot_deal['gia_khuyen_mai']) / $hot_deal['gia_goc']) * 100) ?>%
+                        chỉ còn <?= formatPrice($hot_deal['gia_khuyen_mai']) ?>
+                    </span>
+                    <!-- ✅ SỬA: Kiểm tra xem dùng product_detail.php hay product_detail_fixed.php -->
+                    <a href="/tktshop/customer/product_detail.php?slug=<?= $hot_deal['slug'] ?>" class="btn btn-sm btn-dark ms-3">
+                        Mua ngay
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-2 text-end">
+                <button class="btn btn-sm btn-outline-dark" onclick="closeBanner()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <style>
 .hover-primary:hover {
     color: #0d6efd !important;
-    transition: color 0.3s ease;
 }
 
-.footer-social a:hover {
-    transform: translateY(-2px);
-    transition: transform 0.3s ease;
+.navbar-nav .nav-link:hover {
+    color: #0d6efd !important;
 }
 
-#backToTop {
-    opacity: 0.8;
-    transition: all 0.3s ease;
+.dropdown-menu {
+    border: none;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 
-#backToTop:hover {
-    opacity: 1;
-    transform: translateY(-2px);
+.badge {
+    font-size: 0.6rem !important;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 768px) {
+    .input-group {
+        width: 100% !important;
+        margin: 10px 0;
+    }
+    
+    .d-flex.gap-3 {
+        justify-content: center;
+        margin-top: 10px;
+    }
 }
 </style>
 
 <script>
-// 🔧 DEBUG: Footer script loaded
-console.log('🔧 Footer loaded - All links point to *_fixed.php files');
+// 🔧 DEBUG: Add logging to track any conflicting redirects
+console.log('🔧 Header loaded - Cart link: /tktshop/customer/cart_fixed.php');
 
-// Back to top functionality
+// Close hot deal banner
+function closeBanner() {
+    document.getElementById('hotDealBanner').style.display = 'none';
+    localStorage.setItem('hotDealBannerClosed', 'true');
+}
+
+// Check if banner was closed
 document.addEventListener('DOMContentLoaded', function() {
-    const backToTopBtn = document.getElementById('backToTop');
-    
-    // Show/hide back to top button
-    window.addEventListener('scroll', function() {
-        if (window.pageYOffset > 300) {
-            backToTopBtn.style.display = 'block';
-        } else {
-            backToTopBtn.style.display = 'none';
-        }
-    });
-    
-    // Smooth scroll to top
-    backToTopBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
+    const banner = document.getElementById('hotDealBanner');
+    if (banner && localStorage.getItem('hotDealBannerClosed') === 'true') {
+        banner.style.display = 'none';
+    }
+});
+
+// Update cart count function
+function updateCartCount(count) {
+    document.getElementById('cart-count').textContent = count;
+}
+
+// 🔧 DEBUG: Prevent any external cart redirects
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for any elements that might redirect to cart.php
+    const cartLinks = document.querySelectorAll('a[href*="cart.php"]');
+    if (cartLinks.length > 0) {
+        console.warn('🔧 WARNING: Found cart.php links that should be cart_fixed.php:', cartLinks);
+        
+        // Auto-fix cart links
+        cartLinks.forEach(link => {
+            const oldHref = link.href;
+            link.href = oldHref.replace('cart.php', 'cart_fixed.php');
+            console.log('🔧 AUTO-FIXED cart link:', oldHref, '→', link.href);
         });
-    });
+    }
     
-    // Newsletter form
-    document.
+    // Override any global functions that might redirect to cart.php
+    if (window.redirectToCart) {
+        const originalRedirectToCart = window.redirectToCart;
+        window.redirectToCart = function() {
+            console.log('🔧 Intercepted redirectToCart() - redirecting to cart_fixed.php instead');
+            window.location.href = '/tktshop/customer/cart_fixed.php';
+        };
+    }
+});
+</script>
