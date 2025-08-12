@@ -1,100 +1,110 @@
 <?php
 /**
- * Check original cart.php and products.php for redirect code
- * Save as /tktshop/check_redirects.php
+ * Debug script to check for .htaccess redirect rules
+ * Save as /tktshop/debug_htaccess.php and run
  */
 
-echo "<h1>🔧 Check for PHP Redirects in Original Files</h1>";
+echo "<h1>🔧 Debug .htaccess Files</h1>";
 
-$files_to_analyze = [
-    '/tktshop/customer/cart.php',
-    '/tktshop/customer/products.php',
-    '/tktshop/customer/product_detail.php'
+$paths_to_check = [
+    $_SERVER['DOCUMENT_ROOT'] . '/.htaccess',
+    $_SERVER['DOCUMENT_ROOT'] . '/tktshop/.htaccess', 
+    $_SERVER['DOCUMENT_ROOT'] . '/tktshop/customer/.htaccess',
+    dirname(__FILE__) . '/.htaccess',
+    dirname(__FILE__) . '/customer/.htaccess'
 ];
 
-foreach ($files_to_analyze as $relative_path) {
-    $full_path = $_SERVER['DOCUMENT_ROOT'] . $relative_path;
+foreach ($paths_to_check as $path) {
+    echo "<h2>Checking: $path</h2>";
     
-    echo "<h2>Analyzing: $relative_path</h2>";
-    
-    if (file_exists($full_path)) {
-        $content = file_get_contents($full_path);
-        
-        echo "<div style='background: #f0f8ff; padding: 15px; margin: 10px 0; border: 1px solid #0066cc;'>";
-        echo "<strong>File size:</strong> " . filesize($full_path) . " bytes<br>";
-        echo "<strong>Last modified:</strong> " . date('Y-m-d H:i:s', filemtime($full_path)) . "<br><br>";
-        
-        // Check for redirect patterns
-        $redirect_checks = [
-            'header("Location:' => 'PHP Header Redirect',
-            'header(\'Location:' => 'PHP Header Redirect (single quotes)',
-            'window.location' => 'JavaScript Redirect',
-            'location.href' => 'JavaScript Redirect href',
-            'redirect(' => 'Redirect Function Call',
-            'cart_fixed.php' => 'Reference to cart_fixed.php',
-            'checkout.php' => 'Reference to checkout.php',
-            'products_fixed.php' => 'Reference to products_fixed.php',
-            'product_detail.php' => 'Reference to product_detail.php'
-        ];
-        
-        $found_issues = [];
-        foreach ($redirect_checks as $pattern => $description) {
-            $count = substr_count(strtolower($content), strtolower($pattern));
-            if ($count > 0) {
-                $found_issues[] = "$description ($count times)";
-            }
-        }
-        
-        if (!empty($found_issues)) {
-            echo "<strong>⚠️ Found patterns:</strong><br>";
-            foreach ($found_issues as $issue) {
-                echo "- $issue<br>";
-            }
-            echo "<br>";
-        }
-        
-        // Show first 20 lines
-        $lines = explode("\n", $content);
-        echo "<strong>First 20 lines:</strong><br>";
-        echo "<pre style='background: white; padding: 10px; overflow-x: auto; max-height: 300px; border: 1px solid #ddd;'>";
-        for ($i = 0; $i < min(20, count($lines)); $i++) {
-            echo sprintf("%02d: %s\n", $i + 1, htmlspecialchars($lines[$i]));
-        }
+    if (file_exists($path)) {
+        echo "<div style='background: #ffffcc; padding: 10px; margin: 10px 0; border: 1px solid #ffcc00;'>";
+        echo "<strong>✅ File EXISTS</strong><br>";
+        echo "<strong>Content:</strong><br>";
+        echo "<pre style='background: white; padding: 10px; overflow-x: auto;'>";
+        echo htmlspecialchars(file_get_contents($path));
         echo "</pre>";
-        
-        // Show any header() calls
-        if (stripos($content, 'header(') !== false) {
-            echo "<strong>🚨 Header calls found:</strong><br>";
-            echo "<pre style='background: #ffeeee; padding: 10px; border: 1px solid #ff0000;'>";
-            
-            preg_match_all('/header\s*\([^)]+\)/i', $content, $matches);
-            foreach ($matches[0] as $match) {
-                echo htmlspecialchars($match) . "\n";
-            }
-            echo "</pre>";
-        }
-        
         echo "</div>";
-        
     } else {
         echo "<div style='background: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc;'>";
-        echo "❌ File NOT found: $full_path";
+        echo "❌ File NOT found";
         echo "</div>";
     }
 }
 
-echo "<h2>🔧 Direct Test Links</h2>";
-echo "<div style='background: #f8f8f8; padding: 15px; margin: 10px 0; border: 1px solid #888;'>";
-echo "<p><strong>Click these to test direct access (should NOT redirect):</strong></p>";
-echo "<p><a href='/tktshop/customer/cart_fixed.php?direct_test=1' target='_blank'>Direct cart_fixed.php test</a></p>";
-echo "<p><a href='/tktshop/customer/checkout.php?direct_test=1' target='_blank'>Direct checkout.php test</a></p>";
-echo "<p><a href='/tktshop/customer/products_fixed.php?direct_test=1' target='_blank'>Direct products_fixed.php test</a></p>";
+echo "<h2>🔧 Current Request Info</h2>";
+echo "<div style='background: #e6f3ff; padding: 10px; margin: 10px 0; border: 1px solid #0066cc;'>";
+echo "<strong>REQUEST_URI:</strong> " . ($_SERVER['REQUEST_URI'] ?? 'Not set') . "<br>";
+echo "<strong>SCRIPT_NAME:</strong> " . ($_SERVER['SCRIPT_NAME'] ?? 'Not set') . "<br>";
+echo "<strong>PHP_SELF:</strong> " . ($_SERVER['PHP_SELF'] ?? 'Not set') . "<br>";
+echo "<strong>HTTP_HOST:</strong> " . ($_SERVER['HTTP_HOST'] ?? 'Not set') . "<br>";
+echo "<strong>DOCUMENT_ROOT:</strong> " . ($_SERVER['DOCUMENT_ROOT'] ?? 'Not set') . "<br>";
+echo "<strong>Current file:</strong> " . __FILE__ . "<br>";
 echo "</div>";
 
-echo "<h2>🔧 Server Info</h2>";
-echo "<div style='background: #f0f8ff; padding: 15px; margin: 10px 0; border: 1px solid #0066cc;'>";
-echo "<strong>Server Software:</strong> " . ($_SERVER['SERVER_SOFTWARE'] ?? 'Unknown') . "<br>";
-echo "<strong>Request Method:</strong> " . ($_SERVER['REQUEST_METHOD'] ?? 'Unknown') . "<br>";
-echo "<strong>Query String:</strong> " . ($_SERVER['QUERY_STRING'] ?? 'None') . "<br>";
+echo "<h2>🔧 Check for PHP redirect code</h2>";
+$files_to_check = [
+    dirname(__FILE__) . '/customer/cart.php',
+    dirname(__FILE__) . '/customer/products.php',
+    dirname(__FILE__) . '/customer/includes/header.php',
+    dirname(__FILE__) . '/customer/includes/footer.php'
+];
+
+foreach ($files_to_check as $file) {
+    if (file_exists($file)) {
+        echo "<h3>$file</h3>";
+        $content = file_get_contents($file);
+        
+        // Check for redirect patterns
+        $redirect_patterns = [
+            'header("Location:',
+            'header(\'Location:',
+            'wp_redirect',
+            'window.location',
+            'cart.php',
+            'products.php'
+        ];
+        
+        $found_redirects = [];
+        foreach ($redirect_patterns as $pattern) {
+            if (stripos($content, $pattern) !== false) {
+                $found_redirects[] = $pattern;
+            }
+        }
+        
+        if (!empty($found_redirects)) {
+            echo "<div style='background: #ffeeee; padding: 10px; margin: 10px 0; border: 1px solid #ff0000;'>";
+            echo "<strong>⚠️ Found potential redirects:</strong><br>";
+            foreach ($found_redirects as $pattern) {
+                echo "- $pattern<br>";
+            }
+            echo "</div>";
+        } else {
+            echo "<div style='background: #eeffee; padding: 10px; margin: 10px 0; border: 1px solid #00aa00;'>";
+            echo "✅ No redirect patterns found";
+            echo "</div>";
+        }
+    }
+}
+
+echo "<h2>🔧 Apache modules info</h2>";
+if (function_exists('apache_get_modules')) {
+    $modules = apache_get_modules();
+    echo "<div style='background: #f0f8ff; padding: 10px; margin: 10px 0; border: 1px solid #0066cc;'>";
+    echo "<strong>mod_rewrite enabled:</strong> " . (in_array('mod_rewrite', $modules) ? '✅ YES' : '❌ NO') . "<br>";
+    echo "<strong>All modules:</strong> " . implode(', ', $modules);
+    echo "</div>";
+} else {
+    echo "<div style='background: #fff0f0; padding: 10px; margin: 10px 0; border: 1px solid #cc0000;'>";
+    echo "❌ apache_get_modules() not available";
+    echo "</div>";
+}
+
+echo "<h2>🔧 Test direct file access</h2>";
+echo "<div style='background: #f8f8f8; padding: 10px; margin: 10px 0; border: 1px solid #888;'>";
+echo "<a href='/tktshop/customer/cart_fixed.php' target='_blank'>Test cart_fixed.php direct access</a><br>";
+echo "<a href='/tktshop/customer/checkout.php' target='_blank'>Test checkout.php direct access</a><br>";
+echo "<a href='/tktshop/customer/products_fixed.php' target='_blank'>Test products_fixed.php direct access</a><br>";
+echo "<a href='/tktshop/customer/product_detail.php?id=1' target='_blank'>Test product_detail.php direct access</a><br>";
 echo "</div>";
 ?>
