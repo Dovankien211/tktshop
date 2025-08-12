@@ -113,3 +113,4 @@
 2025-08-12 09:58:22 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products.php on line 397
 2025-08-12 10:04:05 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products.php on line 397
 2025-08-12 10:04:08 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products.php on line 397
+2025-08-12 10:22:17 - Error [2]: Undefined array key "source_schema" in D:\Hocweb\laragon\www\tktshop\customer\index_fixed.php on line 408
