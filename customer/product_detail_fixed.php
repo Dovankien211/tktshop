@@ -1,507 +1,138 @@
-// Product configuration
-const productTable = '<?= $product_table ?>';
-const productId = <?= $product['id'] ?>;
+<?php
+// customer/product_detail_fixed.php - ENHANCED VERSION
+/**
+ * Chi tiết sản phẩm - Phiên bản cải tiến với robust error handling
+ * 🔧 FIXED: Xử lý toàn diện các trường hợp lỗi và fallback logic
+ */
+session_start();
 
-<?php if ($product_table == 'san_pham_chinh' && !empty($variant_matrix)): ?>
-// Variant matrix for san_pham_chinh
-const variantMatrix = <?= json_encode($variant_matrix) ?>;
-const colors = <?= json_encode(array_values($colors)) ?>;
+require_once '../config/database.php';
+require_once '../config/config.php';
+require_once 'product_detail_helper.php'; // Include helper functions
 
-let selectedSize = null;
-let selectedColorId = null;
-let currentVariant = null;
+// Handle automatic URL redirects
+handleProductUrlRedirects();
 
-// Size selection
-document.querySelectorAll('.size-option').forEach(option => {
-    option.addEventListener('click', function() {
-        if (this.classList.contains('disabled')) return;
-        
-        const size = this.dataset.size;
-        selectSize(size, this);
-    });
-});
+// Nhận parameters từ URL
+$id = (int)($_GET['id'] ?? 0);
+$slug = trim($_GET['slug'] ?? '');
 
-function selectSize(size, element) {
-    selectedSize = size;
-    document.getElementById('selectedSize').value = size;
-    
-    // Update UI
-    document.querySelectorAll('.size-option').forEach(opt => opt.classList.remove('selected'));
-    element.classList.add('selected');
-    
-    updateAvailableColors();
-    updateVariantInfo();
+// Debug logging
+debugProductSearch($slug, $id, null);
+
+// Validate input
+if (!$id && !$slug) {
+    alert('Vui lòng cung cấp thông tin sản phẩm hợp lệ!', 'error');
+    redirect('/customer/products.php');
 }
 
-// Color selection
-document.querySelectorAll('.color-option').forEach(option => {
-    option.addEventListener('click', function() {
-        if (this.classList.contains('disabled')) return;
-        
-        const colorId = parseInt(this.dataset.colorId);
-        selectColor(colorId, this);
-    });
-});
+// Tìm sản phẩm với fallback logic
+$product_data = findProductWithFallback($pdo, $slug, $id);
 
-function selectColor(colorId, element) {
-    selectedColorId = colorId;
-    document.getElementById('selectedColorId').value = colorId;
-    
-    // Update UI
-    document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-    element.classList.add('selected');
-    
-    // Show color name
-    const color = colors.find(c => c.id == colorId);
-    document.getElementById('selectedColorName').textContent = color ? color.ten_mau : '';
-    
-    updateVariantInfo();
-}
-
-function updateAvailableColors() {
-    if (!selectedSize) {
-        // Reset all colors to enabled
-        document.querySelectorAll('.color-option').forEach(opt => {
-            opt.classList.remove('disabled');
-        });
-        return;
-    }
-    
-    const availableColors = variantMatrix[selectedSize] || {};
-    
-    document.querySelectorAll('.color-option').forEach(option => {
-        const colorId = parseInt(option.dataset.colorId);
+if (!$product_data) {
+    // Fallback cuối cùng: Tìm sản phẩm đầu tiên có sẵn
+    try {
+        $fallback = $pdo->query("
+            SELECT sp.*, dm.ten_danh_muc,
+                   COALESCE(sp.gia_khuyen_mai, sp.gia_goc) as gia_hien_tai
+            FROM san_pham_chinh sp
+            LEFT JOIN danh_muc_giay dm ON sp.danh_muc_id = dm.id
+            WHERE sp.trang_thai = 'hoat_dong'
+            ORDER BY sp.san_pham_noi_bat DESC, sp.luot_xem DESC
+            LIMIT 1
+        ")->fetch();
         
-        if (availableColors[colorId]) {
-            option.classList.remove('disabled');
-        } else {
-            option.classList.add('disabled');
-            if (option.classList.contains('selected')) {
-                option.classList.remove('selected');
-                selectedColorId = null;
-                document.getElementById('selectedColorId').value = '';
-                document.getElementById('selectedColorName').textContent = '';
-            }
+        if ($fallback) {
+            alert('Sản phẩm bạn tìm không tồn tại. Đây là sản phẩm gợi ý cho bạn.', 'warning');
+            $product_data = ['product' => $fallback, 'table' => 'san_pham_chinh'];
         }
-    });
-}
-
-function updateVariantInfo() {
-    const stockInfo = document.getElementById('stockInfo');
-    const addToCartBtn = document.getElementById('addToCartBtn');
-    const quantityInput = document.getElementById('quantity');
-    
-    if (!selectedSize || !selectedColorId) {
-        stockInfo.textContent = '';
-        addToCartBtn.disabled = true;
-        addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Vui lòng chọn size và màu';
-        currentVariant = null;
-        return;
-    }
-    
-    const variant = variantMatrix[selectedSize] && variantMatrix[selectedSize][selectedColorId];
-    currentVariant = variant;
-    
-    if (variant) {
-        const stock = variant.so_luong_ton_kho;
-        
-        if (stock > 0) {
-            stockInfo.innerHTML = `<span class="text-success">Còn ${stock} sản phẩm</span>`;
-            addToCartBtn.disabled = false;
-            addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Thêm vào giỏ hàng';
-            quantityInput.max = stock;
-            
-            if (stock <= 5) {
-                stockInfo.innerHTML = `<span class="text-warning stock-warning">Chỉ còn ${stock} sản phẩm!</span>`;
-            }
-        } else {
-            stockInfo.innerHTML = '<span class="text-danger">Hết hàng</span>';
-            addToCartBtn.disabled = true;
-            addToCartBtn.innerHTML = '<i class="fas fa-times me-2"></i>Hết hàng';
-        }
-    } else {
-        stockInfo.innerHTML = '<span class="text-danger">Không có sẵn</span>';
-        addToCartBtn.disabled = true;
-        addToCartBtn.innerHTML = '<i class="fas fa-times me-2"></i>Không có sẵn';
-    }
-}
-<?php endif; ?>
-
-// Image gallery functions
-function changeMainImage(imageSrc, thumbnailElement) {
-    const mainImage = document.getElementById('mainImage');
-    if (mainImage) {
-        mainImage.src = '<?= "/tktshop/uploads/products/" ?>' + imageSrc;
-        
-        // Update thumbnail active state
-        document.querySelectorAll('.thumbnail').forEach(thumb => thumb.classList.remove('active'));
-        thumbnailElement.classList.add('active');
+    } catch (Exception $e) {
+        error_log("Fallback product search failed: " . $e->getMessage());
     }
 }
 
-// Quantity functions
-function changeQuantity(delta) {
-    const quantityInput = document.getElementById('quantity');
-    const currentValue = parseInt(quantityInput.value) || 1;
-    const newValue = Math.max(1, Math.min(parseInt(quantityInput.max) || 99, currentValue + delta));
-    quantityInput.value = newValue;
+if (!$product_data) {
+    alert('Không tìm thấy sản phẩm. Vui lòng thử lại!', 'error');
+    redirect('/customer/products.php');
 }
 
-// Add to cart function
-async function addToCartAjax() {
-    const form = document.getElementById('addToCartForm');
-    const addToCartBtn = document.getElementById('addToCartBtn');
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    
-    // Validation for san_pham_chinh
-    if (productTable === 'san_pham_chinh') {
-        if (!selectedSize || !selectedColorId) {
-            showToast('Vui lòng chọn size và màu sắc!', 'warning');
-            return;
-        }
-        
-        if (!currentVariant || currentVariant.so_luong_ton_kho <= 0) {
-            showToast('Sản phẩm hiện tại không có sẵn!', 'error');
-            return;
-        }
+$product = $product_data['product'];
+$product_table = $product_data['table'];
+
+// Debug log kết quả
+debugProductSearch($slug, $id, $product_data);
+
+// Cập nhật lượt xem
+updateProductViews($pdo, $product['id'], $product_table);
+
+// Đảm bảo sản phẩm có slug
+if ($product_table === 'san_pham_chinh' && empty($product['slug'])) {
+    $new_slug = ensureProductSlug($pdo, $product['id'], $product['ten_san_pham'], $product_table);
+    if ($new_slug) {
+        $product['slug'] = $new_slug;
     }
+}
+
+// Lấy variants sản phẩm
+$variant_data = getProductVariants($pdo, $product['id'], $product_table);
+$variants = $variant_data['variants'];
+$sizes = $variant_data['sizes'];
+$colors = $variant_data['colors'];
+$variant_matrix = $variant_data['variant_matrix'];
+
+// Lấy sản phẩm liên quan
+$related_products = getRelatedProducts($pdo, $product, $product_table);
+
+// Xử lý album ảnh
+$product_images = processProductImages($product, $product_table);
+
+// Tạo breadcrumb
+$breadcrumb = generateProductBreadcrumb($product, $product_table);
+
+// Xử lý AJAX thêm vào giỏ hàng
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_to_cart') {
+    ob_clean();
+    header('Content-Type: application/json');
     
-    // Show loading
-    addToCartBtn.disabled = true;
-    addToCartBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang thêm...';
-    loadingOverlay.style.display = 'flex';
+    $customer_id = $_SESSION['customer_id'] ?? null;
+    $session_id = $customer_id ? null : ($_SESSION['session_id'] ?? session_id());
+    
+    if (!$session_id && !$customer_id) {
+        $_SESSION['session_id'] = session_id();
+        $session_id = $_SESSION['session_id'];
+    }
     
     try {
-        const formData = new FormData(form);
-        
-        const response = await fetch(window.location.href, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast(result.message, 'success');
+        if ($product_table == 'products') {
+            // Xử lý cho bảng products
+            $so_luong = max(1, (int)($_POST['so_luong'] ?? 1));
             
-            // Update cart count in header if exists
-            updateCartCount(result.cart_count);
+            // Kiểm tra tồn kho
+            if (isset($product['stock_quantity']) && $product['stock_quantity'] < $so_luong) {
+                echo json_encode([
+                    'success' => false, 
+                    'message' => 'Không đủ hàng trong kho! Còn lại: ' . $product['stock_quantity']
+                ]);
+                exit;
+            }
             
-            // Reset form state
-            if (productTable === 'san_pham_chinh') {
-                updateVariantInfo();
-            }
-        } else {
-            showToast(result.message, 'error');
-        }
-        
-    } catch (error) {
-        console.error('Add to cart error:', error);
-        showToast('Có lỗi xảy ra khi thêm sản phẩm vào giỏ hàng!', 'error');
-    } finally {
-        // Hide loading
-        loadingOverlay.style.display = 'none';
-        
-        // Reset button
-        if (productTable === 'san_pham_chinh') {
-            if (!selectedSize || !selectedColorId) {
-                addToCartBtn.disabled = true;
-                addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Vui lòng chọn size và màu';
-            } else if (currentVariant && currentVariant.so_luong_ton_kho > 0) {
-                addToCartBtn.disabled = false;
-                addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Thêm vào giỏ hàng';
-            }
-        } else {
-            addToCartBtn.disabled = false;
-            addToCartBtn.innerHTML = '<i class="fas fa-shopping-cart me-2"></i>Thêm vào giỏ hàng';
-        }
-    }
-}
-
-// Toast notification function
-function showToast(message, type = 'info') {
-    const toastContainer = document.getElementById('toastContainer');
-    
-    const toastId = 'toast_' + Date.now();
-    const iconClass = {
-        'success': 'fas fa-check-circle text-success',
-        'error': 'fas fa-times-circle text-danger',
-        'warning': 'fas fa-exclamation-triangle text-warning',
-        'info': 'fas fa-info-circle text-info'
-    }[type] || 'fas fa-info-circle text-info';
-    
-    const bgClass = {
-        'success': 'bg-success',
-        'error': 'bg-danger',
-        'warning': 'bg-warning',
-        'info': 'bg-info'
-    }[type] || 'bg-info';
-    
-    const toastHTML = `
-        <div class="toast" id="${toastId}" role="alert" data-bs-delay="4000">
-            <div class="toast-header ${bgClass} text-white">
-                <i class="${iconClass} me-2"></i>
-                <strong class="me-auto">Thông báo</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
-            </div>
-            <div class="toast-body">
-                ${message}
-            </div>
-        </div>
-    `;
-    
-    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-    
-    const toastElement = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastElement);
-    toast.show();
-    
-    // Remove toast element after it's hidden
-    toastElement.addEventListener('hidden.bs.toast', function() {
-        this.remove();
-    });
-}
-
-// Update cart count in header
-function updateCartCount(count) {
-    const cartCountElements = document.querySelectorAll('.cart-count, #cartCount, .badge-cart');
-    cartCountElements.forEach(element => {
-        element.textContent = count;
-        if (count > 0) {
-            element.style.display = 'inline';
-        } else {
-            element.style.display = 'none';
-        }
-    });
-}
-
-// Add to wishlist function
-async function addToWishlist(productId) {
-    try {
-        const response = await fetch('/tktshop/customer/ajax/wishlist.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({
-                action: 'add',
-                product_id: productId
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast(result.message, 'success');
-        } else {
-            showToast(result.message, 'error');
-        }
-    } catch (error) {
-        console.error('Wishlist error:', error);
-        showToast('Có lỗi xảy ra khi thêm vào danh sách yêu thích!', 'error');
-    }
-}
-
-// Image zoom functionality
-function initImageZoom() {
-    const mainImage = document.getElementById('mainImage');
-    if (!mainImage) return;
-    
-    mainImage.addEventListener('click', function() {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Xem ảnh chi tiết</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body text-center">
-                        <img src="${this.src}" class="img-fluid" alt="Product Image">
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
-        
-        modal.addEventListener('hidden.bs.modal', function() {
-            modal.remove();
-        });
-    });
-}
-
-// Lazy loading for related products
-function initLazyLoading() {
-    const images = document.querySelectorAll('img[data-src]');
-    
-    if ('IntersectionObserver' in window) {
-        const imageObserver = new IntersectionObserver((entries, observer) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const img = entry.target;
-                    img.src = img.dataset.src;
-                    img.classList.remove('lazy');
-                    imageObserver.unobserve(img);
+            // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
+            $check_cart = $pdo->prepare("
+                SELECT * FROM gio_hang 
+                WHERE san_pham_id = ? 
+                AND (khach_hang_id = ? OR session_id = ?)
+                AND bien_the_id IS NULL
+            ");
+            $check_cart->execute([$product['id'], $customer_id, $session_id]);
+            $existing_item = $check_cart->fetch();
+            
+            if ($existing_item) {
+                // Cập nhật số lượng
+                $new_quantity = $existing_item['so_luong'] + $so_luong;
+                if (isset($product['stock_quantity']) && $new_quantity > $product['stock_quantity']) {
+                    echo json_encode([
+                        'success' => false, 
+                        'message' => 'Không đủ hàng trong kho! Tối đa có thể mua: ' . $product['stock_quantity']
+                    ]);
+                    exit;
                 }
-            });
-        });
-        
-        images.forEach(img => imageObserver.observe(img));
-    } else {
-        // Fallback for older browsers
-        images.forEach(img => {
-            img.src = img.dataset.src;
-        });
-    }
-}
-
-// Price formatting function
-function formatPrice(price) {
-    return new Intl.NumberFormat('vi-VN', {
-        style: 'currency',
-        currency: 'VND'
-    }).format(price);
-}
-
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize image zoom
-    initImageZoom();
-    
-    // Initialize lazy loading
-    initLazyLoading();
-    
-    // Auto-select first available variant for san_pham_chinh
-    <?php if ($product_table == 'san_pham_chinh' && !empty($variants)): ?>
-    if (productTable === 'san_pham_chinh') {
-        // Auto-select first size if only one available
-        const sizeOptions = document.querySelectorAll('.size-option');
-        if (sizeOptions.length === 1) {
-            selectSize(sizeOptions[0].dataset.size, sizeOptions[0]);
-        }
-        
-        // Update initial state
-        updateAvailableColors();
-        updateVariantInfo();
-    }
-    <?php endif; ?>
-    
-    // Handle quantity input changes
-    const quantityInput = document.getElementById('quantity');
-    if (quantityInput) {
-        quantityInput.addEventListener('change', function() {
-            const value = parseInt(this.value);
-            const min = parseInt(this.min) || 1;
-            const max = parseInt(this.max) || 99;
-            
-            if (value < min) this.value = min;
-            if (value > max) this.value = max;
-        });
-    }
-    
-    // Handle keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-        // Escape key to close modals
-        if (e.key === 'Escape') {
-            const openModals = document.querySelectorAll('.modal.show');
-            openModals.forEach(modal => {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                if (modalInstance) modalInstance.hide();
-            });
-        }
-        
-        // Ctrl/Cmd + Enter to add to cart
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            const addToCartBtn = document.getElementById('addToCartBtn');
-            if (addToCartBtn && !addToCartBtn.disabled) {
-                addToCartAjax();
-            }
-        }
-    });
-    
-    // Handle scroll effects
-    let lastScrollTop = 0;
-    window.addEventListener('scroll', function() {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        
-        // Add/remove shadow to header based on scroll
-        const header = document.querySelector('header, .navbar');
-        if (header) {
-            if (scrollTop > 50) {
-                header.classList.add('shadow-sm');
-            } else {
-                header.classList.remove('shadow-sm');
-            }
-        }
-        
-        lastScrollTop = scrollTop;
-    });
-    
-    // Analytics tracking
-    trackProductView();
-});
-
-// Analytics functions
-function trackProductView() {
-    // Track product view for analytics
-    if (typeof gtag !== 'undefined') {
-        gtag('event', 'view_item', {
-            'currency': 'VND',
-            'value': <?= $product['gia_hien_tai'] ?>,
-            'items': [{
-                'item_id': '<?= $product['id'] ?>',
-                'item_name': '<?= addslashes($product['ten_san_pham']) ?>',
-                'item_category': '<?= addslashes($product['ten_danh_muc'] ?? '') ?>',
-                'item_brand': '<?= addslashes($product['thuong_hieu'] ?? '') ?>',
-                'price': <?= $product['gia_hien_tai'] ?>,
-                'quantity': 1
-            }]
-        });
-    }
-}
-
-function trackAddToCart() {
-    // Track add to cart for analytics
-    if (typeof gtag !== 'undefined') {
-        const quantity = parseInt(document.getElementById('quantity').value) || 1;
-        gtag('event', 'add_to_cart', {
-            'currency': 'VND',
-            'value': <?= $product['gia_hien_tai'] ?> * quantity,
-            'items': [{
-                'item_id': '<?= $product['id'] ?>',
-                'item_name': '<?= addslashes($product['ten_san_pham']) ?>',
-                'item_category': '<?= addslashes($product['ten_danh_muc'] ?? '') ?>',
-                'item_brand': '<?= addslashes($product['thuong_hieu'] ?? '') ?>',
-                'price': <?= $product['gia_hien_tai'] ?>,
-                'quantity': quantity
-            }]
-        });
-    }
-}
-
-// Error handling
-window.addEventListener('error', function(e) {
-    console.error('JavaScript error:', e.error);
-    // You can send this to your logging service
-});
-
-// Service Worker registration for PWA (optional)
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/tktshop/sw.js')
-            .then(function(registration) {
-                console.log('SW registered: ', registration);
-            })
-            .catch(function(registrationError) {
-                console.log('SW registration failed: ', registrationError);
-            });
-    });
-}
