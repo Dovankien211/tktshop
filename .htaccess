@@ -1,4 +1,5 @@
-# File: .htaccess (trong thư mục tktshop/) - FIXED VERSION
+# File: .htaccess (trong thư mục tktshop/) - FINAL FIXED VERSION
+# 🔧 FIXED: Removed problematic redirect rules
 RewriteEngine On
 
 # Set base path for subdirectory
@@ -47,19 +48,23 @@ RewriteRule ^admin/(users|categories|sizes|colors|products|reviews|orders)/(crea
 # Customer root - homepage  
 RewriteRule ^/?$ customer/index.php [L]
 
-# Customer pages - ALLOW _fixed files to work normally
+# Customer auth pages
 RewriteRule ^login/?$ customer/login.php [L]
 RewriteRule ^register/?$ customer/register.php [L]
 
-# 🔧 FIXED: Comment out the old redirect rules that cause issues
+# 🔧 CRITICAL FIX: COMMENT OUT THE PROBLEMATIC RULES
+# These rules were causing the redirect issues:
 # RewriteRule ^products/?$ customer/products.php [L,QSA]
 # RewriteRule ^cart/?$ customer/cart.php [L]
 
-# 🔧 NEW: Allow both original and _fixed files to coexist
-# Products routes
+# 🔧 NEW: Optional friendly URLs (but allow direct file access)
+# Only redirect if the actual file doesn't exist
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^products/?$ customer/products_fixed.php [L,QSA]
 
-# Cart routes  
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^cart/?$ customer/cart_fixed.php [L]
 
 # ================================
@@ -79,7 +84,8 @@ RewriteRule \.(jpg|jpeg|png|gif|webp)$ - [L]
 # FALLBACK
 # ================================
 
-# If file exists, serve it (this allows cart_fixed.php, products_fixed.php to work)
+# 🔧 CRITICAL: Allow direct file access first
+# If file exists, serve it directly (this allows cart_fixed.php, products_fixed.php, etc.)
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
