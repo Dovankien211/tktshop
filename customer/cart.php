@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 $totals = $stmt->fetch();
                 
                 $subtotal = $totals['selected_subtotal'] ?? 0;
-                $shipping_fee = $subtotal >= 500000 ? 0 : 30000;
+                $shipping_fee = $subtotal >= 0 ? 0 : 0;
                 $tax = $subtotal * 0.1;
                 $total = $subtotal + $shipping_fee + $tax;
                 
