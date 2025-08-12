@@ -184,3 +184,4 @@
 2025-08-12 13:56:47 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products_fixed.php on line 378
 2025-08-12 13:56:56 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products_fixed.php on line 378
 2025-08-12 13:56:58 - Error [2]: Array to string conversion in D:\Hocweb\laragon\www\tktshop\customer\products_fixed.php on line 378
+2025-08-12 13:57:54 - Error [8]: session_start(): Ignoring session_start() because a session is already active in D:\Hocweb\laragon\www\tktshop\vnpay\create_payment.php on line 13
