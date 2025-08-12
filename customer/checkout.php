@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     // 🔧 NEW: Tính phí vận chuyển và thuế chính xác
     $phi_van_chuyen = 0;
-    if ($subtotal < 500000) { // Miễn phí vận chuyển cho đơn từ 500k
+    if ($subtotal < 0) { // Miễn phí vận chuyển cho đơn từ 500k
         switch ($form_data['phuong_thuc_van_chuyen']) {
             case 'giao_hang_nhanh':
                 $phi_van_chuyen = 30000;
