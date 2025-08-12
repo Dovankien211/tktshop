@@ -1,8 +1,8 @@
 <?php
-// customer/includes/header.php - FIXED & SIMPLIFIED VERSION
+// customer/includes/header.php - FIXED LINKS VERSION
 /**
- * Header chung cho website khách hàng
- * Chức năng: Menu navigation, tìm kiếm, giỏ hàng, đăng nhập/đăng ký
+ * Header chung cho website khách hàng - ĐÃ SỬA LINKS
+ * Chỉ sửa các link từ file gốc sang file _fixed
  */
 
 // Lấy danh mục chính cho menu
@@ -39,11 +39,7 @@ if (isset($_SESSION['customer_id'])) {
                 <small>
                     <i class="fas fa-phone me-2"></i>(028) 1234 5678
                     <span class="ms-4">
-<<<<<<< HEAD
-                        <i class="fas fa-envelope me-2"></i>info@tktshop.com
-=======
                         <i class="fas fa-envelope me-2"></i>Dovankien072211@gmail.com
->>>>>>> f5238b6be95728ed0ad638cad35debcf5af2c622
                     </span>
                 </small>
             </div>
@@ -79,8 +75,9 @@ if (isset($_SESSION['customer_id'])) {
                     </a>
                 </li>
                 
+                <!-- ✅ SỬA: products.php → products_fixed.php -->
                 <li class="nav-item">
-                    <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : '' ?>" href="/tktshop/customer/products.php">
+                    <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'products_fixed.php' ? 'active' : '' ?>" href="/tktshop/customer/products_fixed.php">
                         <i class="fas fa-shopping-bag me-1"></i>Sản phẩm
                     </a>
                 </li>
@@ -91,12 +88,14 @@ if (isset($_SESSION['customer_id'])) {
                         <i class="fas fa-tags me-1"></i>Danh mục
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php">
+                        <!-- ✅ SỬA: products.php → products_fixed.php -->
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php">
                             <i class="fas fa-th-large me-2"></i>Tất cả sản phẩm
                         </a></li>
                         <li><hr class="dropdown-divider"></li>
                         <?php foreach ($main_categories as $category): ?>
-                            <li><a class="dropdown-item" href="/tktshop/customer/products.php?category=<?= $category['id'] ?>">
+                            <!-- ✅ SỬA: products.php → products_fixed.php -->
+                            <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?category=<?= $category['id'] ?>">
                                 <i class="fas fa-angle-right me-2"></i>
                                 <?= htmlspecialchars($category['ten_danh_muc']) ?>
                                 <span class="badge bg-light text-dark ms-2"><?= $category['so_san_pham'] ?></span>
@@ -111,19 +110,20 @@ if (isset($_SESSION['customer_id'])) {
                         <i class="fas fa-star me-1"></i>Thương hiệu
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php?brand=Nike">
+                        <!-- ✅ SỬA: Tất cả products.php → products_fixed.php -->
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Nike">
                             <i class="fas fa-angle-right me-2"></i>Nike
                         </a></li>
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php?brand=Adidas">
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Adidas">
                             <i class="fas fa-angle-right me-2"></i>Adidas
                         </a></li>
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php?brand=Converse">
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Converse">
                             <i class="fas fa-angle-right me-2"></i>Converse
                         </a></li>
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php?brand=Vans">
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Vans">
                             <i class="fas fa-angle-right me-2"></i>Vans
                         </a></li>
-                        <li><a class="dropdown-item" href="/tktshop/customer/products.php?brand=Puma">
+                        <li><a class="dropdown-item" href="/tktshop/customer/products_fixed.php?brand=Puma">
                             <i class="fas fa-angle-right me-2"></i>Puma
                         </a></li>
                     </ul>
@@ -131,7 +131,8 @@ if (isset($_SESSION['customer_id'])) {
             </ul>
             
             <!-- Search Form -->
-            <form class="d-flex me-3" action="/tktshop/customer/products.php" method="GET">
+            <!-- ✅ SỬA: products.php → products_fixed.php -->
+            <form class="d-flex me-3" action="/tktshop/customer/products_fixed.php" method="GET">
                 <div class="input-group" style="width: 300px;">
                     <input class="form-control" 
                            type="search" 
@@ -148,7 +149,8 @@ if (isset($_SESSION['customer_id'])) {
             <!-- User Actions -->
             <div class="d-flex align-items-center gap-3">
                 <!-- Shopping Cart -->
-                <a href="/tktshop/customer/cart.php" class="text-decoration-none position-relative" title="Giỏ hàng">
+                <!-- ✅ SỬA: cart.php → cart_fixed.php -->
+                <a href="/tktshop/customer/cart_fixed.php" class="text-decoration-none position-relative" title="Giỏ hàng">
                     <i class="fas fa-shopping-cart fs-5 text-muted hover-primary"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary" id="cart-count" style="font-size: 0.7rem;">
                         <?= $cart_count ?>
@@ -222,6 +224,7 @@ if ($hot_deal && rand(1, 100) <= 30): // 30% chance hiển thị banner
                         - Giảm <?= round((($hot_deal['gia_goc'] - $hot_deal['gia_khuyen_mai']) / $hot_deal['gia_goc']) * 100) ?>%
                         chỉ còn <?= formatPrice($hot_deal['gia_khuyen_mai']) ?>
                     </span>
+                    <!-- ✅ SỬA: Kiểm tra xem dùng product_detail.php hay product_detail_fixed.php -->
                     <a href="/tktshop/customer/product_detail.php?slug=<?= $hot_deal['slug'] ?>" class="btn btn-sm btn-dark ms-3">
                         Mua ngay
                     </a>
