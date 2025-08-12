@@ -289,7 +289,7 @@ if (isset($_GET['error']) && $_GET['error'] === 'vnpay') {
 }
 
 // 🔧 NEW: Tính phí vận chuyển và thuế mặc định
-$phi_van_chuyen = $subtotal >= 0 ? 0 : 30000;
+$phi_van_chuyen = $subtotal >= 0 ? 0 : 0;
 $thue = $subtotal * 0.1; // Thuế 10%
 $total_amount = $subtotal + $phi_van_chuyen + $thue;
 ?>
@@ -548,7 +548,7 @@ $total_amount = $subtotal + $phi_van_chuyen + $thue;
                                 </div>
                                 <div class="text-end">
                                     <div class="fw-bold" id="shipping-cost-nhanh">
-                                        <?= $subtotal >= 500000 ? '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
+                                        <?= $subtotal >= 0 ? '<span class="text-decoration-line-through">30.000đ</span> <span class="text-success">Miễn phí</span>' : '30.000đ' ?>
                                     </div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
                                 </div>
@@ -563,7 +563,7 @@ $total_amount = $subtotal + $phi_van_chuyen + $thue;
                                     <div class="text-muted small mt-1">Giao trong 3-5 ngày</div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="fw-bold"><?= $subtotal >= 500000 ? 'Miễn phí' : '20.000đ' ?></div>
+                                    <div class="fw-bold"><?= $subtotal >= 0 ? 'Miễn phí' : '20.000đ' ?></div>
                                     <div class="text-success small">Miễn phí từ 500k</div>
                                 </div>
                             </div>
