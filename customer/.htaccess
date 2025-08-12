@@ -1,0 +1,83 @@
+# .htaccess - Enhanced URL handling for TKT Shop
+# Đặt file này trong thư mục /tktshop/customer/
+
+RewriteEngine On
+
+# Bảo mật: Chặn truy cập vào các file nhạy cảm
+<Files ~ "^\.ht">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Chặn truy cập trực tiếp vào các file PHP config
+<FilesMatch "(config|database|helper)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Redirect các URL pattern sản phẩm phổ biến
+# Pattern: /product/123 -> product_detail.php?id=123
+RewriteRule ^product/([0-9]+)/?$ product_detail.php?id=$1 [L,QSA]
+
+# Pattern: /product/slug-name -> product_detail.php?slug=slug-name
+RewriteRule ^product/([a-zA-Z0-9\-_]+)/?$ product_detail.php?slug=$1 [L,QSA]
+
+# Pattern: /sp/123 -> product_detail.php?id=123 (short URL)
+RewriteRule ^sp/([0-9]+)/?$ product_detail.php?id=$1 [L,QSA]
+
+# Pattern: /sp/slug-name -> product_detail.php?slug=slug-name
+RewriteRule ^sp/([a-zA-Z0-9\-_]+)/?$ product_detail.php?slug=$1 [L,QSA]
+
+# Pattern: /p123 -> product_detail.php?id=123 (very short URL)
+RewriteRule ^p([0-9]+)/?$ product_detail.php?id=$1 [L,QSA]
+
+# Pattern: /products/category/123 -> products.php?category=123
+RewriteRule ^products/category/([0-9]+)/?$ products.php?category=$1 [L,QSA]
+
+# Pattern: /products/brand/nike -> products.php?brand=nike
+RewriteRule ^products/brand/([a-zA-Z0-9\-_]+)/?$ products.php?brand=$1 [L,QSA]
+
+# Pattern: /search/keyword -> products.php?search=keyword
+RewriteRule ^search/([^/]+)/?$ products.php?search=$1 [L,QSA]
+
+# Xử lý trailing slash
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^([^/]+)/$ $1 [R=301,L]
+
+# Xử lý 404 cho sản phẩm không tồn tại
+ErrorDocument 404 /tktshop/customer/404.php
+
+# Cache control cho static files
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# Compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
