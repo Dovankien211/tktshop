@@ -1,2 +1,0 @@
-{"timestamp":"2025-08-12 13:51:14","type":"create_payment","ip":"::1","data":{"transaction_id":"6","order_id":12,"vnp_txn_ref":"ORD000012","amount":3960000,"customer_email":"dv1k@gmail.comm","bank_code":""}}
-{"timestamp":"2025-08-12 13:57:54","type":"create_payment","ip":"::1","data":{"transaction_id":"7","order_id":13,"vnp_txn_ref":"ORD000013","amount":3960000,"customer_email":"dv1k@gmail.comm","bank_code":""}}
