@@ -1,5 +1,5 @@
 <?php
-// admin/users/index.php - ĐÃ SỬA ĐƯỜNG DẪN
+// admin/users/index.php - ĐÃ SỬA LAYOUT
 /**
  * Quản lý người dùng
  */
@@ -32,7 +32,7 @@ if (isset($_GET['delete'])) {
             }
         }
     }
-    redirect('admin/users/'); // ĐÃ SỬA
+    redirect('admin/users/');
 }
 
 // Lấy danh sách người dùng với tìm kiếm và lọc
@@ -83,180 +83,181 @@ $users = $stmt->fetchAll();
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <h2>Quản lý người dùng</h2>
-                    <a href="<?= adminUrl('users/create.php') ?>" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Thêm người dùng
-                    </a>
-                </div>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-users me-2"></i>Quản lý người dùng</h1>
+                <a href="<?= adminUrl('users/create.php') ?>" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Thêm người dùng
+                </a>
+            </div>
 
-                <?php showAlert(); ?>
+            <?php showAlert(); ?>
 
-                <!-- Bộ lọc -->
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <form method="GET" action="<?= adminUrl('users/') ?>" class="row g-3">
-                            <div class="col-md-4">
-                                <input type="text" 
-                                       class="form-control" 
-                                       name="search" 
-                                       placeholder="Tìm theo tên, email, username..."
-                                       value="<?= htmlspecialchars($search) ?>">
-                            </div>
-                            <div class="col-md-2">
-                                <select name="role" class="form-select">
-                                    <option value="">Tất cả vai trò</option>
-                                    <option value="admin" <?= $role_filter == 'admin' ? 'selected' : '' ?>>Admin</option>
-                                    <option value="nhan_vien" <?= $role_filter == 'nhan_vien' ? 'selected' : '' ?>>Nhân viên</option>
-                                    <option value="khach_hang" <?= $role_filter == 'khach_hang' ? 'selected' : '' ?>>Khách hàng</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <select name="status" class="form-select">
-                                    <option value="">Tất cả trạng thái</option>
-                                    <option value="hoat_dong" <?= $status_filter == 'hoat_dong' ? 'selected' : '' ?>>Hoạt động</option>
-                                    <option value="chua_kich_hoat" <?= $status_filter == 'chua_kich_hoat' ? 'selected' : '' ?>>Chưa kích hoạt</option>
-                                    <option value="bi_khoa" <?= $status_filter == 'bi_khoa' ? 'selected' : '' ?>>Bị khóa</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <button type="submit" class="btn btn-outline-primary">
-                                    <i class="fas fa-search"></i> Tìm kiếm
-                                </button>
-                            </div>
-                            <div class="col-md-2">
-                                <a href="<?= adminUrl('users/') ?>" class="btn btn-outline-secondary">
-                                    <i class="fas fa-times"></i> Xóa bộ lọc
-                                </a>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Thông tin</th>
-                                        <th>Vai trò</th>
-                                        <th>Trạng thái</th>
-                                        <th>Đơn hàng</th>
-                                        <th>Tổng chi tiêu</th>
-                                        <th>Ngày tạo</th>
-                                        <th>Hành động</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($users)): ?>
-                                        <tr>
-                                            <td colspan="8" class="text-center">Không tìm thấy người dùng nào</td>
-                                        </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($users as $user): ?>
-                                            <tr>
-                                                <td><?= $user['id'] ?></td>
-                                                <td>
-                                                    <div>
-                                                        <strong><?= htmlspecialchars($user['ho_ten']) ?></strong>
-                                                        <?php if ($user['id'] == $_SESSION['admin_id']): ?>
-                                                            <span class="badge bg-info">Bạn</span>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <div class="text-muted small">
-                                                        <i class="fas fa-user"></i> <?= htmlspecialchars($user['ten_dang_nhap']) ?>
-                                                    </div>
-                                                    <div class="text-muted small">
-                                                        <i class="fas fa-envelope"></i> <?= htmlspecialchars($user['email']) ?>
-                                                    </div>
-                                                    <?php if ($user['so_dien_thoai']): ?>
-                                                        <div class="text-muted small">
-                                                            <i class="fas fa-phone"></i> <?= htmlspecialchars($user['so_dien_thoai']) ?>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php 
-                                                    $role_classes = [
-                                                        'admin' => 'danger',
-                                                        'nhan_vien' => 'warning',
-                                                        'khach_hang' => 'primary'
-                                                    ];
-                                                    $role_text = [
-                                                        'admin' => 'Admin',
-                                                        'nhan_vien' => 'Nhân viên',
-                                                        'khach_hang' => 'Khách hàng'
-                                                    ];
-                                                    ?>
-                                                    <span class="badge bg-<?= $role_classes[$user['vai_tro']] ?>">
-                                                        <?= $role_text[$user['vai_tro']] ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php 
-                                                    $status_classes = [
-                                                        'hoat_dong' => 'success',
-                                                        'chua_kich_hoat' => 'warning',
-                                                        'bi_khoa' => 'danger'
-                                                    ];
-                                                    $status_text = [
-                                                        'hoat_dong' => 'Hoạt động',
-                                                        'chua_kich_hoat' => 'Chưa kích hoạt',
-                                                        'bi_khoa' => 'Bị khóa'
-                                                    ];
-                                                    ?>
-                                                    <span class="badge bg-<?= $status_classes[$user['trang_thai']] ?>">
-                                                        <?= $status_text[$user['trang_thai']] ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php if ($user['vai_tro'] == 'khach_hang'): ?>
-                                                        <span class="badge bg-info"><?= $user['so_don_hang'] ?></span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">-</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if ($user['vai_tro'] == 'khach_hang' && $user['tong_chi_tieu'] > 0): ?>
-                                                        <span class="text-success fw-bold"><?= formatPrice($user['tong_chi_tieu']) ?></span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">-</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <small><?= date('d/m/Y', strtotime($user['ngay_tao'])) ?></small>
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <a href="<?= adminUrl('users/edit.php?id=' . $user['id']) ?>" 
-                                                           class="btn btn-warning" title="Sửa">
-                                                            <i class="fas fa-edit"></i>
-                                                        </a>
-                                                        <?php if ($user['id'] != $_SESSION['admin_id']): ?>
-                                                            <a href="<?= adminUrl('users/?delete=' . $user['id']) ?>" 
-                                                               class="btn btn-danger"
-                                                               title="Xóa"
-                                                               onclick="return confirm('Bạn có chắc muốn xóa người dùng này?\n\nLưu ý: Không thể xóa nếu đã có đơn hàng.')">
-                                                                <i class="fas fa-trash"></i>
-                                                            </a>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+            <!-- Bộ lọc -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <form method="GET" action="<?= adminUrl('users/') ?>" class="row g-3">
+                        <div class="col-md-4">
+                            <input type="text" 
+                                   class="form-control" 
+                                   name="search" 
+                                   placeholder="Tìm theo tên, email, username..."
+                                   value="<?= htmlspecialchars($search) ?>">
                         </div>
+                        <div class="col-md-2">
+                            <select name="role" class="form-select">
+                                <option value="">Tất cả vai trò</option>
+                                <option value="admin" <?= $role_filter == 'admin' ? 'selected' : '' ?>>Admin</option>
+                                <option value="nhan_vien" <?= $role_filter == 'nhan_vien' ? 'selected' : '' ?>>Nhân viên</option>
+                                <option value="khach_hang" <?= $role_filter == 'khach_hang' ? 'selected' : '' ?>>Khách hàng</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="status" class="form-select">
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="hoat_dong" <?= $status_filter == 'hoat_dong' ? 'selected' : '' ?>>Hoạt động</option>
+                                <option value="chua_kich_hoat" <?= $status_filter == 'chua_kich_hoat' ? 'selected' : '' ?>>Chưa kích hoạt</option>
+                                <option value="bi_khoa" <?= $status_filter == 'bi_khoa' ? 'selected' : '' ?>>Bị khóa</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="fas fa-search"></i> Tìm kiếm
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="<?= adminUrl('users/') ?>" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Xóa bộ lọc
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Thông tin</th>
+                                    <th>Vai trò</th>
+                                    <th>Trạng thái</th>
+                                    <th>Đơn hàng</th>
+                                    <th>Tổng chi tiêu</th>
+                                    <th>Ngày tạo</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($users)): ?>
+                                    <tr>
+                                        <td colspan="8" class="text-center">Không tìm thấy người dùng nào</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($users as $user): ?>
+                                        <tr>
+                                            <td><?= $user['id'] ?></td>
+                                            <td>
+                                                <div>
+                                                    <strong><?= htmlspecialchars($user['ho_ten']) ?></strong>
+                                                    <?php if ($user['id'] == $_SESSION['admin_id']): ?>
+                                                        <span class="badge bg-info">Bạn</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="text-muted small">
+                                                    <i class="fas fa-user"></i> <?= htmlspecialchars($user['ten_dang_nhap']) ?>
+                                                </div>
+                                                <div class="text-muted small">
+                                                    <i class="fas fa-envelope"></i> <?= htmlspecialchars($user['email']) ?>
+                                                </div>
+                                                <?php if ($user['so_dien_thoai']): ?>
+                                                    <div class="text-muted small">
+                                                        <i class="fas fa-phone"></i> <?= htmlspecialchars($user['so_dien_thoai']) ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php 
+                                                $role_classes = [
+                                                    'admin' => 'danger',
+                                                    'nhan_vien' => 'warning',
+                                                    'khach_hang' => 'primary'
+                                                ];
+                                                $role_text = [
+                                                    'admin' => 'Admin',
+                                                    'nhan_vien' => 'Nhân viên',
+                                                    'khach_hang' => 'Khách hàng'
+                                                ];
+                                                ?>
+                                                <span class="badge bg-<?= $role_classes[$user['vai_tro']] ?>">
+                                                    <?= $role_text[$user['vai_tro']] ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <?php 
+                                                $status_classes = [
+                                                    'hoat_dong' => 'success',
+                                                    'chua_kich_hoat' => 'warning',
+                                                    'bi_khoa' => 'danger'
+                                                ];
+                                                $status_text = [
+                                                    'hoat_dong' => 'Hoạt động',
+                                                    'chua_kich_hoat' => 'Chưa kích hoạt',
+                                                    'bi_khoa' => 'Bị khóa'
+                                                ];
+                                                ?>
+                                                <span class="badge bg-<?= $status_classes[$user['trang_thai']] ?>">
+                                                    <?= $status_text[$user['trang_thai']] ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <?php if ($user['vai_tro'] == 'khach_hang'): ?>
+                                                    <span class="badge bg-info"><?= $user['so_don_hang'] ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($user['vai_tro'] == 'khach_hang' && $user['tong_chi_tieu'] > 0): ?>
+                                                    <span class="text-success fw-bold"><?= formatPrice($user['tong_chi_tieu']) ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <small><?= date('d/m/Y', strtotime($user['ngay_tao'])) ?></small>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="<?= adminUrl('users/edit.php?id=' . $user['id']) ?>" 
+                                                       class="btn btn-warning" title="Sửa">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <?php if ($user['id'] != $_SESSION['admin_id']): ?>
+                                                        <a href="<?= adminUrl('users/?delete=' . $user['id']) ?>" 
+                                                           class="btn btn-danger"
+                                                           title="Xóa"
+                                                           onclick="return confirm('Bạn có chắc muốn xóa người dùng này?\n\nLưu ý: Không thể xóa nếu đã có đơn hàng.')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
