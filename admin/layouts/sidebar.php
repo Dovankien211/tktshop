@@ -1,7 +1,7 @@
 <?php
 /**
- * Admin Sidebar Navigation - ĐÃ SỬA TẤT CẢ LỖI ĐƯỜNG DẪN
- * Fixed all navigation links and made them work correctly
+ * Admin Sidebar Navigation - ĐÃ FIX TẤT CẢ LỖI DROPDOWN MENU
+ * Fixed all navigation links and collapsible menu functionality
  */
 
 // Lấy current page để highlight active menu
@@ -75,6 +75,8 @@ $admin_base = '/tktshop/admin';
     transition: all 0.3s ease;
     font-size: 0.95rem;
     border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
 }
 
 .menu-link:hover {
@@ -103,6 +105,7 @@ $admin_base = '/tktshop/admin';
 .menu-arrow {
     font-size: 0.8rem;
     transition: transform 0.3s ease;
+    color: #7f8c8d;
 }
 
 .menu-arrow.rotated {
@@ -112,14 +115,16 @@ $admin_base = '/tktshop/admin';
 .submenu {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
+    transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     background: rgba(44, 62, 80, 0.5);
     margin: 5px 8px;
     border-radius: 8px;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
 }
 
 .submenu.show {
-    max-height: 300px;
+    opacity: 1;
     padding: 8px 0;
 }
 
@@ -272,13 +277,13 @@ $admin_base = '/tktshop/admin';
         <!-- Quản lý sản phẩm -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="#" class="menu-link" onclick="toggleSubmenu('products-menu', this)">
+                <div class="menu-link" data-toggle-submenu="products-menu">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-box menu-icon"></i>
                         <span class="menu-text">Quản lý sản phẩm</span>
                     </div>
                     <i class="fas fa-chevron-down menu-arrow"></i>
-                </a>
+                </div>
             </div>
             <div id="products-menu" class="submenu <?= isActiveMenu('/admin/products/') ? 'show' : '' ?>">
                 <a href="<?= $admin_base ?>/products/index.php" 
@@ -289,7 +294,6 @@ $admin_base = '/tktshop/admin';
                    class="submenu-link <?= isActiveMenu('/admin/products/add.php') ?>">
                     <i class="fas fa-plus me-2"></i>Thêm sản phẩm
                 </a>
-                <!-- SỬA LỖI: Link biến thể sản phẩm sẽ cần product_id -->
                 <a href="<?= $admin_base ?>/products/index.php" 
                    class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
                     <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
@@ -301,13 +305,13 @@ $admin_base = '/tktshop/admin';
         <!-- Danh mục & Thuộc tính -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="#" class="menu-link" onclick="toggleSubmenu('categories-menu', this)">
+                <div class="menu-link" data-toggle-submenu="categories-menu">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-tags menu-icon"></i>
                         <span class="menu-text">Danh mục & Thuộc tính</span>
                     </div>
                     <i class="fas fa-chevron-down menu-arrow"></i>
-                </a>
+                </div>
             </div>
             <div id="categories-menu" class="submenu <?= isActiveMenu('/admin/categories/') || isActiveMenu('/admin/sizes/') || isActiveMenu('/admin/colors/') ? 'show' : '' ?>">
                 <a href="<?= $admin_base ?>/categories/index.php" 
@@ -330,13 +334,13 @@ $admin_base = '/tktshop/admin';
         <!-- Quản lý đơn hàng -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="#" class="menu-link" onclick="toggleSubmenu('orders-menu', this)">
+                <div class="menu-link" data-toggle-submenu="orders-menu">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-shopping-cart menu-icon"></i>
                         <span class="menu-text">Quản lý đơn hàng</span>
                     </div>
                     <i class="fas fa-chevron-down menu-arrow"></i>
-                </a>
+                </div>
             </div>
             <div id="orders-menu" class="submenu <?= isActiveMenu('/admin/orders/') || isActiveMenu('/admin/cod/') || isActiveMenu('/admin/shipping/') ? 'show' : '' ?>">
                 <a href="<?= $admin_base ?>/orders/index.php" 
@@ -389,13 +393,13 @@ $admin_base = '/tktshop/admin';
         <!-- VNPay & Báo cáo -->
         <div class="menu-section">
             <div class="menu-item">
-                <a href="#" class="menu-link" onclick="toggleSubmenu('reports-menu', this)">
+                <div class="menu-link" data-toggle-submenu="reports-menu">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-chart-line menu-icon"></i>
                         <span class="menu-text">Báo cáo & VNPay</span>
                     </div>
                     <i class="fas fa-chevron-down menu-arrow"></i>
-                </a>
+                </div>
             </div>
             <div id="reports-menu" class="submenu">
                 <a href="<?= $admin_base ?>/cod/reports.php" class="submenu-link">
@@ -443,49 +447,143 @@ $admin_base = '/tktshop/admin';
 </div>
 
 <script>
-function toggleSubmenu(menuId, triggerElement) {
-    event.preventDefault();
-    
-    const submenu = document.getElementById(menuId);
-    const arrow = triggerElement.querySelector('.menu-arrow');
-    
-    // Close all other submenus
-    document.querySelectorAll('.submenu.show').forEach(menu => {
-        if (menu.id !== menuId) {
-            menu.classList.remove('show');
-        }
-    });
-    
-    document.querySelectorAll('.menu-arrow.rotated').forEach(arr => {
-        if (arr !== arrow) {
-            arr.classList.remove('rotated');
-        }
-    });
-    
-    // Toggle current submenu
-    submenu.classList.toggle('show');
-    arrow.classList.toggle('rotated');
-}
-
-// Auto expand active menu on page load
+// ✅ FIX HOÀN CHỈNH - Event delegation cho menu dropdown
 document.addEventListener('DOMContentLoaded', function() {
-    const activeSubmenuLink = document.querySelector('.submenu-link.active');
-    if (activeSubmenuLink) {
-        const parentSubmenu = activeSubmenuLink.closest('.submenu');
-        if (parentSubmenu) {
-            parentSubmenu.classList.add('show');
-            const parentLink = parentSubmenu.previousElementSibling;
-            const arrow = parentLink.querySelector('.menu-arrow');
-            if (arrow) {
+    
+    // Handle submenu toggles với event delegation
+    document.addEventListener('click', function(e) {
+        const menuLink = e.target.closest('[data-toggle-submenu]');
+        if (menuLink) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const menuId = menuLink.getAttribute('data-toggle-submenu');
+            const submenu = document.getElementById(menuId);
+            const arrow = menuLink.querySelector('.menu-arrow');
+            
+            if (!submenu || !arrow) {
+                console.error('Submenu hoặc arrow không tìm thấy:', menuId);
+                return;
+            }
+            
+            const isCurrentlyOpen = submenu.classList.contains('show');
+            
+            // Đóng tất cả submenu khác
+            document.querySelectorAll('.submenu.show').forEach(menu => {
+                if (menu.id !== menuId) {
+                    menu.classList.remove('show');
+                    menu.style.maxHeight = '0px';
+                    
+                    // Reset arrow của menu khác
+                    const otherTrigger = document.querySelector(`[data-toggle-submenu="${menu.id}"]`);
+                    const otherArrow = otherTrigger?.querySelector('.menu-arrow');
+                    if (otherArrow) {
+                        otherArrow.classList.remove('rotated');
+                    }
+                }
+            });
+            
+            // Toggle menu hiện tại
+            if (isCurrentlyOpen) {
+                // Đóng menu
+                submenu.classList.remove('show');
+                submenu.style.maxHeight = '0px';
+                arrow.classList.remove('rotated');
+            } else {
+                // Mở menu
+                submenu.classList.add('show');
+                submenu.style.maxHeight = submenu.scrollHeight + 'px';
                 arrow.classList.add('rotated');
+                
+                // Đảm bảo animation mượt mà
+                setTimeout(() => {
+                    if (submenu.classList.contains('show')) {
+                        submenu.style.maxHeight = 'none';
+                    }
+                }, 400);
             }
         }
+    });
+    
+    // ✅ Auto expand menu chứa trang active
+    setTimeout(() => {
+        const activeSubmenuLinks = document.querySelectorAll('.submenu-link.active');
+        
+        activeSubmenuLinks.forEach(activeLink => {
+            const parentSubmenu = activeLink.closest('.submenu');
+            if (parentSubmenu && !parentSubmenu.classList.contains('show')) {
+                const menuId = parentSubmenu.id;
+                const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+                const arrow = trigger?.querySelector('.menu-arrow');
+                
+                // Mở menu chứa link active
+                parentSubmenu.classList.add('show');
+                parentSubmenu.style.maxHeight = parentSubmenu.scrollHeight + 'px';
+                
+                if (arrow) {
+                    arrow.classList.add('rotated');
+                }
+                
+                console.log('Auto expanded menu:', menuId);
+            }
+        });
+    }, 100);
+    
+    // ✅ Handle window resize - cập nhật maxHeight
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            const openSubmenus = document.querySelectorAll('.submenu.show');
+            openSubmenus.forEach(submenu => {
+                submenu.style.maxHeight = 'none';
+                const newHeight = submenu.scrollHeight;
+                submenu.style.maxHeight = newHeight + 'px';
+            });
+        }, 250);
+    });
+    
+    // ✅ Smooth scrolling cho sidebar
+    const sidebar = document.querySelector('.admin-sidebar');
+    if (sidebar) {
+        sidebar.style.scrollBehavior = 'smooth';
     }
     
-    // Smooth scroll for user section
-    const userSection = document.querySelector('.user-section');
-    if (userSection) {
-        userSection.style.paddingBottom = '20px';
-    }
+    // ✅ Debug log
+    console.log('✅ TKT Shop Admin Sidebar initialized successfully');
+    console.log('📁 Submenus found:', document.querySelectorAll('.submenu').length);
+    console.log('🎯 Toggle triggers found:', document.querySelectorAll('[data-toggle-submenu]').length);
 });
+
+// ✅ Utility function để programmatically mở menu
+function openSubmenu(menuId) {
+    const submenu = document.getElementById(menuId);
+    const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+    const arrow = trigger?.querySelector('.menu-arrow');
+    
+    if (submenu && !submenu.classList.contains('show')) {
+        submenu.classList.add('show');
+        submenu.style.maxHeight = submenu.scrollHeight + 'px';
+        
+        if (arrow) {
+            arrow.classList.add('rotated');
+        }
+    }
+}
+
+// ✅ Utility function để programmatically đóng menu
+function closeSubmenu(menuId) {
+    const submenu = document.getElementById(menuId);
+    const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+    const arrow = trigger?.querySelector('.menu-arrow');
+    
+    if (submenu && submenu.classList.contains('show')) {
+        submenu.classList.remove('show');
+        submenu.style.maxHeight = '0px';
+        
+        if (arrow) {
+            arrow.classList.remove('rotated');
+        }
+    }
+}
 </script>
