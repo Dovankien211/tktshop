@@ -1,6 +1,6 @@
 <?php
 /**
- * Trang danh sách sản phẩm với đầy đủ chức năng CRUD - ĐÃ SỬA LINK BIẾN THỂ
+ * Trang danh sách sản phẩm với đầy đủ chức năng CRUD - ĐÃ SỬA LAYOUT
  */
 
 session_start();
@@ -318,121 +318,6 @@ try {
             line-height: 1.6;
         }
 
-        /* Sidebar */
-        .admin-sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            width: var(--sidebar-width);
-            background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
-            box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
-            overflow-y: auto;
-        }
-
-        .sidebar-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid #475569;
-            background: rgba(30, 41, 59, 0.8);
-        }
-
-        .sidebar-brand {
-            color: #f1f5f9;
-            font-size: 1.4rem;
-            font-weight: 700;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-        }
-
-        .sidebar-nav {
-            padding: 1rem 0;
-        }
-
-        .nav-link {
-            color: #cbd5e1;
-            padding: 0.875rem 1.5rem;
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            border-left: 3px solid transparent;
-        }
-
-        .nav-link:hover, .nav-link.active {
-            background: rgba(59, 130, 246, 0.15);
-            color: #60a5fa;
-            border-left-color: var(--primary-color);
-        }
-
-        .nav-icon {
-            width: 20px;
-            margin-right: 0.75rem;
-            text-align: center;
-        }
-
-        /* Main Content */
-        .main-content {
-            margin-left: var(--sidebar-width);
-            min-height: 100vh;
-            background: var(--light-bg);
-        }
-
-        .content-header {
-            background: white;
-            border-bottom: 1px solid var(--border-color);
-            padding: 1.5rem 2rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .page-title {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--dark-color);
-            margin: 0;
-        }
-
-        .breadcrumb {
-            background: none;
-            padding: 0;
-            margin: 0.5rem 0 0 0;
-            font-size: 0.875rem;
-        }
-
-        .content-body {
-            padding: 2rem;
-        }
-
-        /* Cards */
-        .card {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            margin-bottom: 1.5rem;
-        }
-
-        .card-header {
-            background: #f8fafc;
-            border-bottom: 1px solid var(--border-color);
-            padding: 1.25rem 1.5rem;
-        }
-
-        .card-title {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: var(--dark-color);
-            margin: 0;
-            display: flex;
-            align-items: center;
-        }
-
-        .card-body {
-            padding: 1.5rem;
-        }
-
         /* Stats Cards */
         .stats-card {
             transition: transform 0.2s;
@@ -678,17 +563,37 @@ try {
             border-color: var(--primary-color);
         }
 
+        /* Cards */
+        .card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            background: #f8fafc;
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
         /* Responsive */
         @media (max-width: 1024px) {
-            .admin-sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-            }
-
-            .main-content {
-                margin-left: 0;
-            }
-
             .action-buttons {
                 flex-direction: column;
                 gap: 0.25rem;
@@ -696,14 +601,6 @@ try {
         }
 
         @media (max-width: 768px) {
-            .content-body {
-                padding: 1rem;
-            }
-
-            .card-body {
-                padding: 1rem;
-            }
-
             .table-responsive {
                 font-size: 0.875rem;
             }
@@ -711,46 +608,19 @@ try {
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <div class="admin-sidebar">
-        <div class="sidebar-header">
-            <a href="../dashboard.php" class="sidebar-brand">
-                <i class="fas fa-store me-2"></i>
-                TKT Admin
-            </a>
-        </div>
-        
-        <nav class="sidebar-nav">
-            <a href="../dashboard.php" class="nav-link">
-                <i class="fas fa-tachometer-alt nav-icon"></i>
-                Dashboard
-            </a>
-            <a href="index.php" class="nav-link active">
-                <i class="fas fa-box nav-icon"></i>
-                Quản lý sản phẩm
-            </a>
-            <a href="../categories/index.php" class="nav-link">
-                <i class="fas fa-tags nav-icon"></i>
-                Danh mục
-            </a>
-            <a href="../orders/index.php" class="nav-link">
-                <i class="fas fa-shopping-cart nav-icon"></i>
-                Đơn hàng
-            </a>
-            <a href="../users/index.php" class="nav-link">
-                <i class="fas fa-users nav-icon"></i>
-                Người dùng
-            </a>
-        </nav>
-    </div>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
 
-    <!-- Main Content -->
+    <!-- ✅ Main Content -->
     <div class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="d-flex justify-content-between align-items-start">
+        <div class="content-wrapper">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h1 class="page-title">Quản lý sản phẩm</h1>
+                    <h1>Quản lý sản phẩm</h1>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
                             <li class="breadcrumb-item"><a href="../dashboard.php">Dashboard</a></li>
@@ -763,10 +633,7 @@ try {
                     Thêm sản phẩm
                 </a>
             </div>
-        </div>
 
-        <!-- Content Body -->
-        <div class="content-body">
             <!-- Flash Messages -->
             <?php if (isset($_SESSION['success_message'])): ?>
                 <div class="alert alert-success">
@@ -1046,7 +913,7 @@ try {
                                             
                                             <td>
                                                 <div class="action-buttons">
-                                                    <!-- Quản lý biến thể - SỬA LỖI LINK -->
+                                                    <!-- Quản lý biến thể -->
                                                     <a href="variants.php?product_id=<?php echo $product['id']; ?>" 
                                                        class="btn btn-outline-primary btn-sm" 
                                                        title="Quản lý biến thể">
