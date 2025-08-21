@@ -139,9 +139,13 @@ try {
     <style>
         .stats-card {
             transition: transform 0.3s ease;
+            border: none;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            border-radius: 15px;
         }
         .stats-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 5px 25px rgba(0,0,0,0.15);
         }
         .stats-number {
             font-size: 2rem;
@@ -150,6 +154,33 @@ try {
         .welcome-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        .card-header {
+            background: transparent;
+            border-bottom: 1px solid #f0f0f0;
+            border-radius: 15px 15px 0 0 !important;
+        }
+        .badge {
+            font-size: 0.75em;
+        }
+        .table {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .btn {
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
         }
     </style>
 </head>
@@ -451,39 +482,39 @@ try {
                         </div>
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= adminUrl('products/add.php') ?>" class="btn btn-outline-primary w-100">
-                                        <i class="fas fa-plus mb-1"></i><br>
+                                        <i class="fas fa-plus mb-1 d-block"></i>
                                         <small>Thêm sản phẩm</small>
                                     </a>
                                 </div>
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= adminUrl('orders/') ?>" class="btn btn-outline-warning w-100">
-                                        <i class="fas fa-shopping-cart mb-1"></i><br>
+                                        <i class="fas fa-shopping-cart mb-1 d-block"></i>
                                         <small>Xem đơn hàng</small>
                                     </a>
                                 </div>
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= adminUrl('users/create.php') ?>" class="btn btn-outline-info w-100">
-                                        <i class="fas fa-user-plus mb-1"></i><br>
+                                        <i class="fas fa-user-plus mb-1 d-block"></i>
                                         <small>Thêm người dùng</small>
                                     </a>
                                 </div>
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= adminUrl('categories/create.php') ?>" class="btn btn-outline-success w-100">
-                                        <i class="fas fa-tags mb-1"></i><br>
+                                        <i class="fas fa-tags mb-1 d-block"></i>
                                         <small>Thêm danh mục</small>
                                     </a>
                                 </div>
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= adminUrl('reviews/') ?>" class="btn btn-outline-secondary w-100">
-                                        <i class="fas fa-star mb-1"></i><br>
+                                        <i class="fas fa-star mb-1 d-block"></i>
                                         <small>Quản lý đánh giá</small>
                                     </a>
                                 </div>
-                                <div class="col-md-2 mb-2">
+                                <div class="col-md-2 col-6 mb-2">
                                     <a href="<?= BASE_URL ?>/" target="_blank" class="btn btn-outline-dark w-100">
-                                        <i class="fas fa-external-link-alt mb-1"></i><br>
+                                        <i class="fas fa-external-link-alt mb-1 d-block"></i>
                                         <small>Xem website</small>
                                     </a>
                                 </div>
@@ -503,13 +534,34 @@ try {
         }, 300000);
         
         // Add loading effect to quick action buttons
-        document.querySelectorAll('.btn-outline-primary, .btn-outline-warning, .btn-outline-info, .btn-outline-success, .btn-outline-secondary').forEach(btn => {
+        document.querySelectorAll('.btn-outline-primary, .btn-outline-warning, .btn-outline-info, .btn-outline-success, .btn-outline-secondary, .btn-outline-dark').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 if (!this.href.includes('#')) {
-                    this.innerHTML += ' <i class="fas fa-spinner fa-spin"></i>';
+                    const originalContent = this.innerHTML;
+                    this.innerHTML = originalContent + ' <i class="fas fa-spinner fa-spin"></i>';
                     this.disabled = true;
+                    
+                    // Re-enable after 3 seconds in case navigation fails
+                    setTimeout(() => {
+                        this.innerHTML = originalContent;
+                        this.disabled = false;
+                    }, 3000);
                 }
             });
+        });
+
+        // Add smooth scrolling
+        document.documentElement.style.scrollBehavior = 'smooth';
+
+        // Add tooltips to buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tooltips if Bootstrap tooltip is available
+            if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+                var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
+            }
         });
     </script>
 </body>
