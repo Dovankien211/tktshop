@@ -117,6 +117,57 @@ try {
     box-shadow: 0 0 0 0.2rem rgba(52, 144, 220, 0.25);
     border-color: #3490dc;
     background: white;
+    .custom-sidebar-toggle {
+    position: fixed;
+    top: 20px;
+    left: 290px; /* Sidebar width + 10px */
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(45deg, #f39c12, #e67e22);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 2000;
+    box-shadow: 0 3px 8px rgba(243, 156, 18, 0.4);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.custom-sidebar-toggle:hover {
+    background: linear-gradient(45deg, #e67e22, #d35400);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.6);
+}
+
+.custom-sidebar-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Khi sidebar ẩn */
+.sidebar-hidden .custom-sidebar-toggle {
+    left: 20px; /* Move button to left edge when sidebar hidden */
+}
+
+.sidebar-hidden .admin-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+}
+
+.sidebar-hidden .main-content {
+    margin-left: 0;
+    transition: margin-left 0.3s ease;
+}
+
+/* Animation cho main content */
+.main-content {
+    transition: margin-left 0.3s ease;
+}
 }
 </style>
 
