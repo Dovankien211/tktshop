@@ -155,190 +155,191 @@ try {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <div>
-                        <h2>Chỉnh sửa danh mục</h2>
-                        <p class="text-muted mb-0"><?= htmlspecialchars($category['ten_danh_muc']) ?></p>
-                    </div>
-                    <a href="/tktshop/admin/categories/" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Quay lại
-                    </a>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <h2>Chỉnh sửa danh mục</h2>
+                    <p class="text-muted mb-0"><?= htmlspecialchars($category['ten_danh_muc']) ?></p>
                 </div>
+                <a href="/tktshop/admin/categories/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </a>
+            </div>
 
-                <?php if (!empty($errors)): ?>
-                    <div class="alert alert-danger">
-                        <ul class="mb-0">
-                            <?php foreach ($errors as $error): ?>
-                                <li><?= htmlspecialchars($error) ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    </div>
-                <?php endif; ?>
+            <?php if (!empty($errors)): ?>
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        <?php foreach ($errors as $error): ?>
+                            <li><?= htmlspecialchars($error) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
 
-                <form method="POST" action="<?= $_SERVER['PHP_SELF'] ?>?id=<?= $id ?>" enctype="multipart/form-data">
-                    <div class="row">
-                        <!-- Thông tin cơ bản -->
-                        <div class="col-md-8">
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h5>Thông tin danh mục</h5>
+            <form method="POST" action="<?= $_SERVER['PHP_SELF'] ?>?id=<?= $id ?>" enctype="multipart/form-data">
+                <div class="row">
+                    <!-- Thông tin cơ bản -->
+                    <div class="col-md-8">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5>Thông tin danh mục</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="ten_danh_muc" class="form-label">Tên danh mục <span class="text-danger">*</span></label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="ten_danh_muc" 
+                                           name="ten_danh_muc" 
+                                           value="<?= htmlspecialchars($_POST['ten_danh_muc'] ?? '') ?>"
+                                           required>
                                 </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label for="ten_danh_muc" class="form-label">Tên danh mục <span class="text-danger">*</span></label>
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="ten_danh_muc" 
-                                               name="ten_danh_muc" 
-                                               value="<?= htmlspecialchars($_POST['ten_danh_muc'] ?? '') ?>"
-                                               required>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Slug hiện tại</label>
+                                    <div class="form-control-plaintext">
+                                        <code><?= htmlspecialchars($category['slug']) ?></code>
                                     </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label">Slug hiện tại</label>
-                                        <div class="form-control-plaintext">
-                                            <code><?= htmlspecialchars($category['slug']) ?></code>
+                                    <div class="form-text">Slug sẽ được tự động cập nhật nếu thay đổi tên danh mục</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="danh_muc_cha_id" class="form-label">Danh mục cha</label>
+                                    <select class="form-select" id="danh_muc_cha_id" name="danh_muc_cha_id">
+                                        <option value="">Không có (Danh mục gốc)</option>
+                                        <?php foreach ($parent_categories as $parent): ?>
+                                            <option value="<?= $parent['id'] ?>" <?= ($_POST['danh_muc_cha_id'] ?? '') == $parent['id'] ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars($parent['ten_danh_muc']) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Chọn danh mục cha nếu đây là danh mục con</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="mo_ta" class="form-label">Mô tả</label>
+                                    <textarea class="form-control" 
+                                              id="mo_ta" 
+                                              name="mo_ta" 
+                                              rows="4"
+                                              placeholder="Mô tả về danh mục..."><?= htmlspecialchars($_POST['mo_ta'] ?? '') ?></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sidebar -->
+                    <div class="col-md-4">
+                        <!-- Ảnh danh mục -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5>Ảnh danh mục</h5>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($category['hinh_anh']): ?>
+                                    <div class="mb-3 text-center">
+                                        <img src="/tktshop/uploads/categories/<?= $category['hinh_anh'] ?>" 
+                                             alt="<?= htmlspecialchars($category['ten_danh_muc']) ?>"
+                                             class="img-fluid rounded"
+                                             style="max-height: 200px;">
+                                        <div class="mt-2">
+                                            <small class="text-muted">Ảnh hiện tại</small>
                                         </div>
-                                        <div class="form-text">Slug sẽ được tự động cập nhật nếu thay đổi tên danh mục</div>
                                     </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="danh_muc_cha_id" class="form-label">Danh mục cha</label>
-                                        <select class="form-select" id="danh_muc_cha_id" name="danh_muc_cha_id">
-                                            <option value="">Không có (Danh mục gốc)</option>
-                                            <?php foreach ($parent_categories as $parent): ?>
-                                                <option value="<?= $parent['id'] ?>" <?= ($_POST['danh_muc_cha_id'] ?? '') == $parent['id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($parent['ten_danh_muc']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <div class="form-text">Chọn danh mục cha nếu đây là danh mục con</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="mo_ta" class="form-label">Mô tả</label>
-                                        <textarea class="form-control" 
-                                                  id="mo_ta" 
-                                                  name="mo_ta" 
-                                                  rows="4"
-                                                  placeholder="Mô tả về danh mục..."><?= htmlspecialchars($_POST['mo_ta'] ?? '') ?></textarea>
+                                <?php endif; ?>
+                                
+                                <div class="mb-3">
+                                    <label for="hinh_anh" class="form-label">Ảnh đại diện mới</label>
+                                    <input type="file" 
+                                           class="form-control" 
+                                           id="hinh_anh" 
+                                           name="hinh_anh"
+                                           accept="image/*">
+                                    <div class="form-text">Chấp nhận: JPG, PNG, GIF. Tối đa 2MB</div>
+                                </div>
+                                
+                                <div id="image_preview" class="text-center" style="display: none;">
+                                    <img id="preview_img" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
+                                    <div class="mt-2">
+                                        <small class="text-muted">Ảnh mới</small>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- Sidebar -->
-                        <div class="col-md-4">
-                            <!-- Ảnh danh mục -->
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h5>Ảnh danh mục</h5>
-                                </div>
-                                <div class="card-body">
-                                    <?php if ($category['hinh_anh']): ?>
-                                        <div class="mb-3 text-center">
-                                            <img src="/tktshop/uploads/categories/<?= $category['hinh_anh'] ?>" 
-                                                 alt="<?= htmlspecialchars($category['ten_danh_muc']) ?>"
-                                                 class="img-fluid rounded"
-                                                 style="max-height: 200px;">
-                                            <div class="mt-2">
-                                                <small class="text-muted">Ảnh hiện tại</small>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
-                                    
-                                    <div class="mb-3">
-                                        <label for="hinh_anh" class="form-label">Ảnh đại diện mới</label>
-                                        <input type="file" 
-                                               class="form-control" 
-                                               id="hinh_anh" 
-                                               name="hinh_anh"
-                                               accept="image/*">
-                                        <div class="form-text">Chấp nhận: JPG, PNG, GIF. Tối đa 2MB</div>
-                                    </div>
-                                    
-                                    <div id="image_preview" class="text-center" style="display: none;">
-                                        <img id="preview_img" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
-                                        <div class="mt-2">
-                                            <small class="text-muted">Ảnh mới</small>
-                                        </div>
-                                    </div>
-                                </div>
+                        <!-- Cài đặt -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5>Cài đặt</h5>
                             </div>
-                            
-                            <!-- Cài đặt -->
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h5>Cài đặt</h5>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="thu_tu_hien_thi" class="form-label">Thứ tự hiển thị</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="thu_tu_hien_thi" 
+                                           name="thu_tu_hien_thi" 
+                                           value="<?= $_POST['thu_tu_hien_thi'] ?? 0 ?>"
+                                           min="0">
+                                    <div class="form-text">Số nhỏ sẽ hiển thị trước</div>
                                 </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label for="thu_tu_hien_thi" class="form-label">Thứ tự hiển thị</label>
-                                        <input type="number" 
-                                               class="form-control" 
-                                               id="thu_tu_hien_thi" 
-                                               name="thu_tu_hien_thi" 
-                                               value="<?= $_POST['thu_tu_hien_thi'] ?? 0 ?>"
-                                               min="0">
-                                        <div class="form-text">Số nhỏ sẽ hiển thị trước</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="trang_thai" class="form-label">Trạng thái</label>
-                                        <select class="form-select" id="trang_thai" name="trang_thai">
-                                            <option value="hoat_dong" <?= ($_POST['trang_thai'] ?? '') == 'hoat_dong' ? 'selected' : '' ?>>
-                                                Hoạt động
-                                            </option>
-                                            <option value="an" <?= ($_POST['trang_thai'] ?? '') == 'an' ? 'selected' : '' ?>>
-                                                Ẩn
-                                            </option>
-                                        </select>
-                                    </div>
+                                
+                                <div class="mb-3">
+                                    <label for="trang_thai" class="form-label">Trạng thái</label>
+                                    <select class="form-select" id="trang_thai" name="trang_thai">
+                                        <option value="hoat_dong" <?= ($_POST['trang_thai'] ?? '') == 'hoat_dong' ? 'selected' : '' ?>>
+                                            Hoạt động
+                                        </option>
+                                        <option value="an" <?= ($_POST['trang_thai'] ?? '') == 'an' ? 'selected' : '' ?>>
+                                            Ẩn
+                                        </option>
+                                    </select>
                                 </div>
-                            </div>
-                            
-                            <!-- Thống kê -->
-                            <?php 
-                            try {
-                                $stats = $pdo->prepare("
-                                    SELECT COUNT(*) as so_san_pham 
-                                    FROM san_pham_chinh 
-                                    WHERE danh_muc_id = ? AND trang_thai = 'hoat_dong'
-                                ");
-                                $stats->execute([$id]);
-                                $stats = $stats->fetch();
-                            } catch (PDOException $e) {
-                                $stats = ['so_san_pham' => 0];
-                            }
-                            ?>
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h5>Thống kê</h5>
-                                </div>
-                                <div class="card-body text-center">
-                                    <div class="h4 text-primary"><?= $stats['so_san_pham'] ?></div>
-                                    <small class="text-muted">Sản phẩm trong danh mục</small>
-                                </div>
-                            </div>
-                            
-                            <!-- Nút lưu -->
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-save"></i> Cập nhật danh mục
-                                </button>
-                                <a href="/tktshop/admin/categories/" class="btn btn-secondary">Hủy</a>
                             </div>
                         </div>
+                        
+                        <!-- Thống kê -->
+                        <?php 
+                        try {
+                            $stats = $pdo->prepare("
+                                SELECT COUNT(*) as so_san_pham 
+                                FROM san_pham_chinh 
+                                WHERE danh_muc_id = ? AND trang_thai = 'hoat_dong'
+                            ");
+                            $stats->execute([$id]);
+                            $stats = $stats->fetch();
+                        } catch (PDOException $e) {
+                            $stats = ['so_san_pham' => 0];
+                        }
+                        ?>
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5>Thống kê</h5>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="h4 text-primary"><?= $stats['so_san_pham'] ?></div>
+                                <small class="text-muted">Sản phẩm trong danh mục</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Nút lưu -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> Cập nhật danh mục
+                            </button>
+                            <a href="/tktshop/admin/categories/" class="btn btn-secondary">Hủy</a>
+                        </div>
                     </div>
-                </form>
-            </div>
+                </div>
+            </form>
         </div>
     </div>
 
