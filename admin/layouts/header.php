@@ -31,12 +31,27 @@ try {
 ?>
 
 <style>
-/* ✅ CSS CHO LAYOUT VỚI SIDEBAR TOGGLE */
+/* ✅ CSS CHO LAYOUT VỚI SIDEBAR TOGGLE - ĐÃ FIX */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f8f9fa;
+    margin: 0;
+    padding: 0;
+}
+
 .main-content {
     margin-left: 280px; /* Width của sidebar */
     min-height: 100vh;
     transition: margin-left 0.3s ease;
     background: #f8f9fa;
+    position: relative;
+}
+
+/* Content wrapper */
+.content-wrapper {
+    padding: 20px;
+    max-width: 100%;
+    min-height: calc(100vh - 40px);
 }
 
 /* Khi sidebar collapsed */
@@ -88,32 +103,49 @@ try {
     display: none;
 }
 
-/* Toggle button */
-.sidebar-toggle {
+/* ✅ SIDEBAR TOGGLE BUTTON - ĐÃ FIX */
+.sidebar-toggle-btn {
     position: fixed;
     top: 20px;
     left: 290px; /* Sidebar width + 10px */
-    z-index: 1001;
-    background: #3498db;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #f39c12;
     border: none;
     color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transition: all 0.3s ease;
+    font-weight: bold;
+    font-size: 18px;
     cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+    transition: all 0.3s ease;
 }
 
-.sidebar-toggle:hover {
-    background: #2980b9;
+.sidebar-toggle-btn:hover {
+    background: #e67e22;
     transform: scale(1.1);
 }
 
-.sidebar-collapsed .sidebar-toggle {
-    left: 70px; /* Collapsed width + 10px */
+/* ✅ SIDEBAR HIDE STATES - ĐÃ FIX */
+body.sidebar-hidden .admin-sidebar {
+    transform: translateX(-280px);
+    transition: transform 0.3s ease;
 }
 
+body.sidebar-hidden .main-content {
+    margin-left: 0;
+    transition: margin-left 0.3s ease;
+}
+
+body.sidebar-hidden .sidebar-toggle-btn {
+    left: 20px;
+}
+
+/* ✅ ADMIN HEADER - ĐÃ FIX */
 .admin-header {
     background: linear-gradient(90deg, #fff 0%, #f8f9fa 100%);
     border-bottom: 1px solid #dee2e6;
@@ -121,6 +153,7 @@ try {
     position: sticky;
     top: 0;
     z-index: 1020;
+    margin-bottom: 20px;
 }
 
 .header-brand {
@@ -132,6 +165,7 @@ try {
 
 .header-brand:hover {
     color: #3498db;
+    text-decoration: none;
 }
 
 .notification-badge {
@@ -202,7 +236,7 @@ try {
     background: white;
 }
 
-/* Responsive */
+/* ✅ RESPONSIVE - ĐÃ FIX */
 @media (max-width: 768px) {
     .main-content {
         margin-left: 0;
@@ -217,42 +251,94 @@ try {
         transform: translateX(0);
     }
     
-    .sidebar-toggle {
+    .sidebar-toggle-btn {
         left: 20px;
         top: 20px;
     }
     
-    .sidebar-open .sidebar-toggle {
+    .sidebar-open .sidebar-toggle-btn {
         left: 290px;
     }
 }
 
-/* Content wrapper */
-.content-wrapper {
-    padding: 20px;
-    max-width: 100%;
-}
-
-/* Fix cho dashboard cards */
-.dashboard-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.dashboard-card {
-    background: white;
+/* ✅ CARD & COMPONENT STYLING */
+.card {
+    border: none;
     border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid #f0f0f0;
+    border-radius: 10px 10px 0 0 !important;
+    padding: 15px 20px;
+}
+
+.table-responsive {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.btn {
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+/* ✅ FORM STYLING */
+.form-control, .form-select {
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* ✅ BADGE STYLING */
+.badge {
+    font-size: 0.75em;
+    padding: 0.4em 0.6em;
+}
+
+/* ✅ TABLE STYLING */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #555;
+    background: #f8f9fa;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > td {
+    background: rgba(0,0,0,.02);
+}
+
+/* ✅ UTILITIES */
+.text-muted {
+    color: #6c757d !important;
+}
+
+.fw-bold {
+    font-weight: 600 !important;
+}
+
+.rounded-pill {
+    border-radius: 50rem !important;
 }
 </style>
 
 <!-- ✅ TOGGLE BUTTON -->
-<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
-    <i class="fas fa-bars"></i>
-</button>
+<button class="sidebar-toggle-btn" id="sidebarToggleBtn">‹</button>
 
 <header class="admin-header">
     <div class="container-fluid px-3">
@@ -416,7 +502,7 @@ try {
 // ✅ JAVASCRIPT CHO TOGGLE SIDEBAR
 function toggleSidebar() {
     const body = document.body;
-    const button = document.getElementById('sidebarToggle');
+    const button = document.getElementById('sidebarToggleBtn');
     const icon = button.querySelector('i');
     
     body.classList.toggle('sidebar-collapsed');
@@ -432,19 +518,28 @@ function toggleSidebar() {
     localStorage.setItem('sidebarCollapsed', body.classList.contains('sidebar-collapsed'));
 }
 
-// Mobile toggle
-function toggleMobileSidebar() {
-    document.body.classList.toggle('sidebar-open');
-}
-
-// Khôi phục trạng thái sidebar từ localStorage
+// ✅ SIDEBAR HIDE/SHOW
 document.addEventListener('DOMContentLoaded', function() {
-    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-    const button = document.getElementById('sidebarToggle');
+    const btn = document.getElementById('sidebarToggleBtn');
     
-    if (isCollapsed && button) {
-        document.body.classList.add('sidebar-collapsed');
-        button.querySelector('i').className = 'fas fa-chevron-right';
+    // Toggle sidebar khi click
+    btn.addEventListener('click', function() {
+        document.body.classList.toggle('sidebar-hidden');
+        
+        if (document.body.classList.contains('sidebar-hidden')) {
+            btn.textContent = '›'; // Mũi tên phải khi ẩn
+        } else {
+            btn.textContent = '‹'; // Mũi tên trái khi hiện
+        }
+        
+        // Lưu trạng thái
+        localStorage.setItem('sidebarHidden', document.body.classList.contains('sidebar-hidden'));
+    });
+    
+    // Khôi phục trạng thái khi load trang
+    if (localStorage.getItem('sidebarHidden') === 'true') {
+        document.body.classList.add('sidebar-hidden');
+        btn.textContent = '›';
     }
     
     // Update breadcrumb based on current page
@@ -454,19 +549,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.innerWidth <= 768) {
         document.addEventListener('click', function(e) {
             const sidebar = document.querySelector('.admin-sidebar');
-            const toggleBtn = document.getElementById('sidebarToggle');
+            const toggleBtn = document.getElementById('sidebarToggleBtn');
             
             if (!sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
                 document.body.classList.remove('sidebar-open');
             }
         });
     }
-    
-    // Auto-refresh notifications every 30 seconds
-    setInterval(function() {
-        // You can implement AJAX refresh here
-    }, 30000);
 });
+
+// Mobile toggle
+function toggleMobileSidebar() {
+    document.body.classList.toggle('sidebar-open');
+}
 
 function updateBreadcrumb() {
     const path = window.location.pathname;
