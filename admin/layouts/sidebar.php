@@ -1,510 +1,589 @@
 <?php
-// admin/layouts/header.php
 /**
- * Header layout cho admin panel với sidebar toggle
+ * Admin Sidebar Navigation - ĐÃ FIX TẤT CẢ LỖI DROPDOWN MENU
+ * Fixed all navigation links and collapsible menu functionality
  */
 
-// Kiểm tra đăng nhập
-if (!isset($_SESSION['admin_id']) && !isset($_SESSION['user_id'])) {
-    header('Location: /tktshop/admin/login.php');
-    exit;
+// Lấy current page để highlight active menu
+$current_page = $_SERVER['REQUEST_URI'];
+
+function isActiveMenu($path) {
+    global $current_page;
+    return strpos($current_page, $path) !== false ? 'active' : '';
 }
 
-$admin_name = $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? 'Administrator';
-$admin_role = $_SESSION['admin_role'] ?? $_SESSION['user_role'] ?? 'admin';
-$admin_avatar = $_SESSION['admin_avatar'] ?? '';
-
-// Đếm thông báo
-$notification_count = 0;
-$pending_orders = 0;
-
-try {
-    // Đếm đơn hàng chờ xác nhận
-    $stmt = $pdo->query("SELECT COUNT(*) FROM don_hang WHERE trang_thai_don_hang = 'cho_xac_nhan'");
-    $pending_orders = $stmt->fetchColumn();
-    
-    // Tổng thông báo
-    $notification_count = $pending_orders;
-} catch (Exception $e) {
-    // Bỏ qua lỗi nếu bảng chưa tồn tại
-}
+// Xác định base path cho admin
+$admin_base = '/tktshop/admin';
 ?>
 
 <style>
-/* ✅ CSS CHO LAYOUT VỚI SIDEBAR TOGGLE */
-.main-content {
-    margin-left: 280px; /* Width của sidebar */
+.admin-sidebar {
+    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
     min-height: 100vh;
-    transition: margin-left 0.3s ease;
-    background: #f8f9fa;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    z-index: 1000;
+    overflow-y: auto;
 }
 
-/* Khi sidebar collapsed */
-.sidebar-collapsed .main-content {
-    margin-left: 60px; /* Width khi collapsed */
+.sidebar-header {
+    background: rgba(52, 73, 94, 0.8);
+    padding: 20px 15px;
+    border-bottom: 1px solid #465669;
+    backdrop-filter: blur(10px);
 }
 
-.sidebar-collapsed .admin-sidebar {
-    width: 60px;
+.sidebar-brand {
+    color: #ecf0f1;
+    font-size: 1.3rem;
+    font-weight: bold;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    transition: color 0.3s ease;
+}
+
+.sidebar-brand:hover {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.sidebar-menu {
+    padding: 10px 0;
+}
+
+.menu-section {
+    margin-bottom: 5px;
+}
+
+.menu-item {
+    margin: 2px 8px;
+    border-radius: 8px;
     overflow: hidden;
 }
 
-.sidebar-collapsed .sidebar-header .sidebar-brand span {
-    display: none;
-}
-
-.sidebar-collapsed .menu-text,
-.sidebar-collapsed .user-details h6,
-.sidebar-collapsed .user-details small {
-    display: none;
-}
-
-.sidebar-collapsed .menu-link {
-    justify-content: center;
-    padding: 12px 8px;
-}
-
-.sidebar-collapsed .menu-arrow {
-    display: none;
-}
-
-.sidebar-collapsed .user-section {
-    padding: 10px 8px;
-}
-
-.sidebar-collapsed .user-avatar {
-    margin-right: 0;
-}
-
-.sidebar-collapsed .logout-btn {
-    padding: 8px;
-}
-
-.sidebar-collapsed .logout-btn i {
-    margin-right: 0 !important;
-}
-
-.sidebar-collapsed .logout-btn span {
-    display: none;
-}
-
-/* Toggle button */
-.sidebar-toggle {
-    position: fixed;
-    top: 20px;
-    left: 290px; /* Sidebar width + 10px */
-    z-index: 1001;
-    background: #3498db;
-    border: none;
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.sidebar-toggle:hover {
-    background: #2980b9;
-    transform: scale(1.1);
-}
-
-.sidebar-collapsed .sidebar-toggle {
-    left: 70px; /* Collapsed width + 10px */
-}
-
-/* Header cho admin */
-.admin-header {
-    background: linear-gradient(90deg, #fff 0%, #f8f9fa 100%);
-    border-bottom: 1px solid #dee2e6;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    position: sticky;
-    top: 0;
-    z-index: 1020;
-    margin-bottom: 20px;
-}
-
-.header-brand {
-    font-weight: 700;
-    color: #2c3e50;
+.menu-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    color: #bdc3c7;
     text-decoration: none;
-    font-size: 1.1rem;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
 }
 
-.header-brand:hover {
+.menu-link:hover {
+    background: rgba(52, 73, 94, 0.7);
     color: #3498db;
+    transform: translateX(5px);
+    text-decoration: none;
 }
 
-.notification-badge {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    background: #e74c3c;
+.menu-link.active {
+    background: linear-gradient(135deg, #3498db, #2980b9);
     color: white;
-    border-radius: 50%;
-    padding: 2px 6px;
-    font-size: 0.7rem;
-    font-weight: bold;
-    min-width: 18px;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.menu-icon {
+    width: 20px;
+    margin-right: 12px;
     text-align: center;
 }
 
-.admin-dropdown .dropdown-toggle::after {
-    margin-left: 8px;
+.menu-text {
+    flex: 1;
 }
 
-.admin-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+.menu-arrow {
+    font-size: 0.8rem;
+    transition: transform 0.3s ease;
+    color: #7f8c8d;
+}
+
+.menu-arrow.rotated {
+    transform: rotate(180deg);
+}
+
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    background: rgba(44, 62, 80, 0.5);
+    margin: 5px 8px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+}
+
+.submenu.show {
+    opacity: 1;
+    padding: 8px 0;
+}
+
+.submenu-link {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px 10px 45px;
+    color: #95a5a6;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    margin: 2px 8px;
+}
+
+.submenu-link:hover {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    transform: translateX(3px);
+    text-decoration: none;
+}
+
+.submenu-link.active {
+    background: rgba(52, 152, 219, 0.3);
+    color: #3498db;
+    border-left: 3px solid #3498db;
+}
+
+.menu-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #465669, transparent);
+    margin: 15px 20px;
+}
+
+.user-section {
+    background: rgba(44, 62, 80, 0.7);
+    padding: 20px 15px;
+    border-top: 1px solid #465669;
+    margin-top: auto;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: rgba(52, 73, 94, 0.5);
+    border-radius: 8px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
     background: linear-gradient(135deg, #3498db, #2980b9);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-weight: bold;
-    font-size: 0.9rem;
-    margin-right: 8px;
+    margin-right: 12px;
+    font-size: 1.1rem;
 }
 
-.breadcrumb-nav {
-    background: transparent;
-    padding: 0;
+.user-details h6 {
+    color: #ecf0f1;
     margin: 0;
+    font-size: 0.95rem;
 }
 
-.breadcrumb-nav .breadcrumb-item + .breadcrumb-item::before {
-    content: "›";
-    color: #6c757d;
+.user-details small {
+    color: #95a5a6;
 }
 
-.header-actions .btn {
+.logout-btn {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    width: 100%;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.logout-btn:hover {
+    background: linear-gradient(135deg, #c0392b, #a93226);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.badge-count {
+    background: #e74c3c;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
     margin-left: 8px;
 }
 
-.quick-stats {
-    font-size: 0.85rem;
-    color: #6c757d;
+/* Scrollbar styling */
+.admin-sidebar::-webkit-scrollbar {
+    width: 6px;
 }
 
-.search-form {
-    max-width: 300px;
+.admin-sidebar::-webkit-scrollbar-track {
+    background: #34495e;
 }
 
-.search-form .form-control {
-    border-radius: 20px;
-    border: 1px solid #dee2e6;
-    background: #f8f9fa;
+.admin-sidebar::-webkit-scrollbar-thumb {
+    background: #64748b;
+    border-radius: 3px;
 }
 
-.search-form .form-control:focus {
-    box-shadow: 0 0 0 0.2rem rgba(52, 144, 220, 0.25);
-    border-color: #3490dc;
-    background: white;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .main-content {
-        margin-left: 0;
-    }
-    
-    .admin-sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-    }
-    
-    .sidebar-open .admin-sidebar {
-        transform: translateX(0);
-    }
-    
-    .sidebar-toggle {
-        left: 20px;
-        top: 20px;
-    }
-    
-    .sidebar-open .sidebar-toggle {
-        left: 290px;
-    }
-}
-
-/* Content wrapper */
-.content-wrapper {
-    padding: 20px;
-    max-width: 100%;
-}
-
-/* Fix cho dashboard cards */
-.dashboard-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.dashboard-card {
-    background: white;
-    border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+.admin-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 </style>
 
-<!-- ✅ TOGGLE BUTTON -->
-<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
-    <i class="fas fa-bars"></i>
-</button>
-
-<div class="admin-header">
-    <div class="container-fluid px-3">
-        <div class="row align-items-center py-2">
-            <!-- Left side - Brand & Navigation -->
-            <div class="col-md-6">
-                <div class="d-flex align-items-center">
-                    <!-- Mobile toggle -->
-                    <button class="btn btn-link d-md-none me-2" type="button" onclick="toggleMobileSidebar()">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                    
-                    <!-- Brand -->
-                    <a href="/tktshop/admin/dashboard.php" class="header-brand me-4">
-                        <i class="fas fa-store me-2"></i>TKT Admin
-                    </a>
-                    
-                    <!-- Breadcrumb -->
-                    <nav aria-label="breadcrumb" class="breadcrumb-nav d-none d-lg-block">
-                        <ol class="breadcrumb mb-0">
-                            <li class="breadcrumb-item">
-                                <a href="/tktshop/admin/dashboard.php" class="text-decoration-none">
-                                    <i class="fas fa-home"></i>
-                                </a>
-                            </li>
-                            <li class="breadcrumb-item active" id="current-page">Dashboard</li>
-                        </ol>
-                    </nav>
-                </div>
-            </div>
-            
-            <!-- Right side - Search, Notifications, User -->
-            <div class="col-md-6">
-                <div class="d-flex align-items-center justify-content-end">
-                    <!-- Search Form -->
-                    <form class="search-form me-3 d-none d-sm-block" action="/tktshop/admin/products/index.php" method="GET">
-                        <div class="input-group input-group-sm">
-                            <input type="text" 
-                                   class="form-control" 
-                                   placeholder="Tìm sản phẩm..." 
-                                   name="search"
-                                   value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
-                            <button class="btn btn-outline-secondary" type="submit">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        </div>
-                    </form>
-                    
-                    <!-- Quick Stats -->
-                    <div class="quick-stats me-3 d-none d-lg-block">
-                        <small>
-                            <i class="fas fa-clock text-warning"></i>
-                            <span class="text-warning"><?= $pending_orders ?></span> chờ xử lý
-                        </small>
+<div class="admin-sidebar d-flex flex-column">
+    <!-- Header -->
+    <div class="sidebar-header">
+        <a href="<?= $admin_base ?>/dashboard.php" class="sidebar-brand">
+            <i class="fas fa-store me-2"></i>
+            TKT Shop Admin
+        </a>
+    </div>
+    
+    <!-- Navigation Menu -->
+    <div class="sidebar-menu flex-grow-1">
+        <!-- Dashboard -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <a href="<?= $admin_base ?>/dashboard.php" 
+                   class="menu-link <?= isActiveMenu('/admin/dashboard.php') ?>">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-tachometer-alt menu-icon"></i>
+                        <span class="menu-text">Dashboard</span>
                     </div>
-                    
-                    <!-- Notifications -->
-                    <div class="dropdown me-2">
-                        <button class="btn btn-link position-relative" 
-                                type="button" 
-                                data-bs-toggle="dropdown" 
-                                aria-expanded="false">
-                            <i class="fas fa-bell text-muted"></i>
-                            <?php if ($notification_count > 0): ?>
-                                <span class="notification-badge"><?= $notification_count ?></span>
-                            <?php endif; ?>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Thông báo mới</h6></li>
-                            
-                            <?php if ($pending_orders > 0): ?>
-                                <li>
-                                    <a class="dropdown-item" href="/tktshop/admin/orders/index.php?status=cho_xac_nhan">
-                                        <div class="d-flex">
-                                            <div class="flex-shrink-0">
-                                                <i class="fas fa-shopping-cart text-warning"></i>
-                                            </div>
-                                            <div class="flex-grow-1 ms-2">
-                                                <div class="fw-bold">Đơn hàng mới</div>
-                                                <small class="text-muted"><?= $pending_orders ?> đơn chờ xác nhận</small>
-                                            </div>
-                                        </div>
-                                    </a>
-                                </li>
-                                <li><hr class="dropdown-divider"></li>
-                            <?php endif; ?>
-                            
-                            <?php if ($notification_count == 0): ?>
-                                <li><span class="dropdown-item-text text-muted">Không có thông báo mới</span></li>
-                            <?php else: ?>
-                                <li><a class="dropdown-item text-center" href="/tktshop/admin/orders/index.php">Xem tất cả</a></li>
-                            <?php endif; ?>
-                        </ul>
-                    </div>
-                    
-                    <!-- User Dropdown -->
-                    <div class="dropdown admin-dropdown">
-                        <button class="btn btn-link d-flex align-items-center text-decoration-none" 
-                                type="button" 
-                                data-bs-toggle="dropdown" 
-                                aria-expanded="false">
-                            <div class="admin-avatar">
-                                <?= strtoupper(substr($admin_name, 0, 1)) ?>
-                            </div>
-                            <div class="d-none d-md-block">
-                                <div class="fw-bold text-dark"><?= htmlspecialchars($admin_name) ?></div>
-                                <small class="text-muted"><?= $admin_role == 'admin' ? 'Quản trị viên' : 'Nhân viên' ?></small>
-                            </div>
-                            <i class="fas fa-chevron-down ms-2 text-muted"></i>
-                        </button>
-                        
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <div class="dropdown-item-text">
-                                    <div class="d-flex align-items-center">
-                                        <div class="admin-avatar me-2">
-                                            <?= strtoupper(substr($admin_name, 0, 1)) ?>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold"><?= htmlspecialchars($admin_name) ?></div>
-                                            <small class="text-muted"><?= htmlspecialchars($_SESSION['admin_email'] ?? $_SESSION['user_email'] ?? '') ?></small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            
-                            <li>
-                                <a class="dropdown-item" href="/tktshop/admin/profile.php">
-                                    <i class="fas fa-user me-2"></i>Thông tin cá nhân
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/tktshop/admin/settings.php">
-                                    <i class="fas fa-cog me-2"></i>Cài đặt
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/tktshop/" target="_blank">
-                                    <i class="fas fa-external-link-alt me-2"></i>Xem website
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            
-                            <li>
-                                <form method="POST" action="/tktshop/admin/logout.php" class="d-inline">
-                                    <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Bạn có chắc muốn đăng xuất?')">
-                                        <i class="fas fa-sign-out-alt me-2"></i>Đăng xuất
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
+                </a>
             </div>
         </div>
+        
+        <div class="menu-divider"></div>
+        
+        <!-- Quản lý sản phẩm -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <div class="menu-link" data-toggle-submenu="products-menu">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-box menu-icon"></i>
+                        <span class="menu-text">Quản lý sản phẩm</span>
+                    </div>
+                    <i class="fas fa-chevron-down menu-arrow"></i>
+                </div>
+            </div>
+            <div id="products-menu" class="submenu <?= isActiveMenu('/admin/products/') ? 'show' : '' ?>">
+                <a href="<?= $admin_base ?>/products/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/index.php') ?>">
+                    <i class="fas fa-list me-2"></i>Danh sách sản phẩm
+                </a>
+                <a href="<?= $admin_base ?>/products/add.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/add.php') ?>">
+                    <i class="fas fa-plus me-2"></i>Thêm sản phẩm
+                </a>
+                <a href="<?= $admin_base ?>/products/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/products/variants.php') ?>">
+                    <i class="fas fa-cubes me-2"></i>Biến thể sản phẩm
+                    <small class="text-muted ms-1">(từ danh sách SP)</small>
+                </a>
+            </div>
+        </div>
+        
+        <!-- Danh mục & Thuộc tính -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <div class="menu-link" data-toggle-submenu="categories-menu">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-tags menu-icon"></i>
+                        <span class="menu-text">Danh mục & Thuộc tính</span>
+                    </div>
+                    <i class="fas fa-chevron-down menu-arrow"></i>
+                </div>
+            </div>
+            <div id="categories-menu" class="submenu <?= isActiveMenu('/admin/categories/') || isActiveMenu('/admin/sizes/') || isActiveMenu('/admin/colors/') ? 'show' : '' ?>">
+                <a href="<?= $admin_base ?>/categories/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/categories/') ?>">
+                    <i class="fas fa-folder me-2"></i>Danh mục
+                </a>
+                <a href="<?= $admin_base ?>/sizes/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/sizes/') ?>">
+                    <i class="fas fa-ruler me-2"></i>Kích cỡ
+                </a>
+                <a href="<?= $admin_base ?>/colors/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/colors/') ?>">
+                    <i class="fas fa-palette me-2"></i>Màu sắc
+                </a>
+            </div>
+        </div>
+        
+        <div class="menu-divider"></div>
+        
+        <!-- Quản lý đơn hàng -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <div class="menu-link" data-toggle-submenu="orders-menu">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-shopping-cart menu-icon"></i>
+                        <span class="menu-text">Quản lý đơn hàng</span>
+                    </div>
+                    <i class="fas fa-chevron-down menu-arrow"></i>
+                </div>
+            </div>
+            <div id="orders-menu" class="submenu <?= isActiveMenu('/admin/orders/') || isActiveMenu('/admin/cod/') || isActiveMenu('/admin/shipping/') ? 'show' : '' ?>">
+                <a href="<?= $admin_base ?>/orders/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/orders/index.php') ?>">
+                    <i class="fas fa-list me-2"></i>Tất cả đơn hàng
+                </a>
+                <a href="<?= $admin_base ?>/cod/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/cod/') ?>">
+                    <i class="fas fa-money-bill-wave me-2"></i>Quản lý COD
+                </a>
+                <a href="<?= $admin_base ?>/shipping/index.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/shipping/index.php') ?>">
+                    <i class="fas fa-shipping-fast me-2"></i>Vận chuyển
+                </a>
+                <a href="<?= $admin_base ?>/shipping/shippers.php" 
+                   class="submenu-link <?= isActiveMenu('/admin/shipping/shippers.php') ?>">
+                    <i class="fas fa-motorcycle me-2"></i>Quản lý Shipper
+                </a>
+            </div>
+        </div>
+        
+        <!-- Quản lý người dùng -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <a href="<?= $admin_base ?>/users/index.php" 
+                   class="menu-link <?= isActiveMenu('/admin/users/') ?>">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-users menu-icon"></i>
+                        <span class="menu-text">Quản lý người dùng</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+        
+        <!-- Quản lý đánh giá -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <a href="<?= $admin_base ?>/reviews/index.php" 
+                   class="menu-link <?= isActiveMenu('/admin/reviews/') ?>">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-star menu-icon"></i>
+                        <span class="menu-text">Quản lý đánh giá</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+        
+        <div class="menu-divider"></div>
+        
+        <!-- VNPay & Báo cáo -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <div class="menu-link" data-toggle-submenu="reports-menu">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-chart-line menu-icon"></i>
+                        <span class="menu-text">Báo cáo & VNPay</span>
+                    </div>
+                    <i class="fas fa-chevron-down menu-arrow"></i>
+                </div>
+            </div>
+            <div id="reports-menu" class="submenu">
+                <a href="<?= $admin_base ?>/cod/reports.php" class="submenu-link">
+                    <i class="fas fa-chart-bar me-2"></i>Báo cáo COD
+                </a>
+                <a href="/tktshop/vnpay/check_status.php" class="submenu-link">
+                    <i class="fas fa-credit-card me-2"></i>Kiểm tra VNPay
+                </a>
+            </div>
+        </div>
+        
+        <!-- Cài đặt -->
+        <div class="menu-section">
+            <div class="menu-item">
+                <a href="<?= $admin_base ?>/settings.php" 
+                   class="menu-link <?= isActiveMenu('/admin/settings.php') ?>">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-cog menu-icon"></i>
+                        <span class="menu-text">Cài đặt hệ thống</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- User Section -->
+    <div class="user-section">
+        <div class="user-info">
+            <div class="user-avatar">
+                <?= strtoupper(substr($_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? 'A', 0, 1)) ?>
+            </div>
+            <div class="user-details">
+                <h6><?= $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? 'Administrator' ?></h6>
+                <small>Quản trị viên</small>
+            </div>
+        </div>
+        
+        <form method="POST" action="<?= $admin_base ?>/logout.php">
+            <button type="submit" class="logout-btn" onclick="return confirm('Bạn có chắc muốn đăng xuất?')">
+                <i class="fas fa-sign-out-alt me-2"></i>
+                Đăng xuất
+            </button>
+        </form>
     </div>
 </div>
 
 <script>
-// ✅ JAVASCRIPT CHO TOGGLE SIDEBAR
-function toggleSidebar() {
-    const body = document.body;
-    const button = document.getElementById('sidebarToggle');
-    const icon = button.querySelector('i');
-    
-    body.classList.toggle('sidebar-collapsed');
-    
-    // Thay đổi icon
-    if (body.classList.contains('sidebar-collapsed')) {
-        icon.className = 'fas fa-chevron-right';
-    } else {
-        icon.className = 'fas fa-bars';
-    }
-    
-    // Lưu trạng thái vào localStorage
-    localStorage.setItem('sidebarCollapsed', body.classList.contains('sidebar-collapsed'));
-}
-
-// Mobile toggle
-function toggleMobileSidebar() {
-    document.body.classList.toggle('sidebar-open');
-}
-
-// Khôi phục trạng thái sidebar từ localStorage
+// ✅ FIX HOÀN CHỈNH - Event delegation cho menu dropdown
 document.addEventListener('DOMContentLoaded', function() {
-    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-    const button = document.getElementById('sidebarToggle');
     
-    if (isCollapsed && button) {
-        document.body.classList.add('sidebar-collapsed');
-        button.querySelector('i').className = 'fas fa-chevron-right';
-    }
-    
-    // Update breadcrumb based on current page
-    updateBreadcrumb();
-    
-    // Mobile: Đóng sidebar khi click outside
-    if (window.innerWidth <= 768) {
-        document.addEventListener('click', function(e) {
-            const sidebar = document.querySelector('.admin-sidebar');
-            const toggleBtn = document.getElementById('sidebarToggle');
+    // Handle submenu toggles với event delegation
+    document.addEventListener('click', function(e) {
+        const menuLink = e.target.closest('[data-toggle-submenu]');
+        if (menuLink) {
+            e.preventDefault();
+            e.stopPropagation();
             
-            if (!sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
-                document.body.classList.remove('sidebar-open');
+            const menuId = menuLink.getAttribute('data-toggle-submenu');
+            const submenu = document.getElementById(menuId);
+            const arrow = menuLink.querySelector('.menu-arrow');
+            
+            if (!submenu || !arrow) {
+                console.error('Submenu hoặc arrow không tìm thấy:', menuId);
+                return;
+            }
+            
+            const isCurrentlyOpen = submenu.classList.contains('show');
+            
+            // Đóng tất cả submenu khác
+            document.querySelectorAll('.submenu.show').forEach(menu => {
+                if (menu.id !== menuId) {
+                    menu.classList.remove('show');
+                    menu.style.maxHeight = '0px';
+                    
+                    // Reset arrow của menu khác
+                    const otherTrigger = document.querySelector(`[data-toggle-submenu="${menu.id}"]`);
+                    const otherArrow = otherTrigger?.querySelector('.menu-arrow');
+                    if (otherArrow) {
+                        otherArrow.classList.remove('rotated');
+                    }
+                }
+            });
+            
+            // Toggle menu hiện tại
+            if (isCurrentlyOpen) {
+                // Đóng menu
+                submenu.classList.remove('show');
+                submenu.style.maxHeight = '0px';
+                arrow.classList.remove('rotated');
+            } else {
+                // Mở menu
+                submenu.classList.add('show');
+                submenu.style.maxHeight = submenu.scrollHeight + 'px';
+                arrow.classList.add('rotated');
+                
+                // Đảm bảo animation mượt mà
+                setTimeout(() => {
+                    if (submenu.classList.contains('show')) {
+                        submenu.style.maxHeight = 'none';
+                    }
+                }, 400);
+            }
+        }
+    });
+    
+    // ✅ Auto expand menu chứa trang active
+    setTimeout(() => {
+        const activeSubmenuLinks = document.querySelectorAll('.submenu-link.active');
+        
+        activeSubmenuLinks.forEach(activeLink => {
+            const parentSubmenu = activeLink.closest('.submenu');
+            if (parentSubmenu && !parentSubmenu.classList.contains('show')) {
+                const menuId = parentSubmenu.id;
+                const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+                const arrow = trigger?.querySelector('.menu-arrow');
+                
+                // Mở menu chứa link active
+                parentSubmenu.classList.add('show');
+                parentSubmenu.style.maxHeight = parentSubmenu.scrollHeight + 'px';
+                
+                if (arrow) {
+                    arrow.classList.add('rotated');
+                }
+                
+                console.log('Auto expanded menu:', menuId);
             }
         });
+    }, 100);
+    
+    // ✅ Handle window resize - cập nhật maxHeight
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            const openSubmenus = document.querySelectorAll('.submenu.show');
+            openSubmenus.forEach(submenu => {
+                submenu.style.maxHeight = 'none';
+                const newHeight = submenu.scrollHeight;
+                submenu.style.maxHeight = newHeight + 'px';
+            });
+        }, 250);
+    });
+    
+    // ✅ Smooth scrolling cho sidebar
+    const sidebar = document.querySelector('.admin-sidebar');
+    if (sidebar) {
+        sidebar.style.scrollBehavior = 'smooth';
     }
+    
+    // ✅ Debug log
+    console.log('✅ TKT Shop Admin Sidebar initialized successfully');
+    console.log('📁 Submenus found:', document.querySelectorAll('.submenu').length);
+    console.log('🎯 Toggle triggers found:', document.querySelectorAll('[data-toggle-submenu]').length);
 });
 
-function updateBreadcrumb() {
-    const path = window.location.pathname;
-    const currentPageElement = document.getElementById('current-page');
+// ✅ Utility function để programmatically mở menu
+function openSubmenu(menuId) {
+    const submenu = document.getElementById(menuId);
+    const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+    const arrow = trigger?.querySelector('.menu-arrow');
     
-    if (!currentPageElement) return;
-    
-    let pageName = 'Dashboard';
-    
-    if (path.includes('/products/')) {
-        if (path.includes('create.php') || path.includes('add.php')) {
-            pageName = 'Thêm sản phẩm';
-        } else if (path.includes('variants.php')) {
-            pageName = 'Biến thể sản phẩm';
-        } else if (path.includes('edit.php')) {
-            pageName = 'Sửa sản phẩm';
-        } else {
-            pageName = 'Quản lý sản phẩm';
+    if (submenu && !submenu.classList.contains('show')) {
+        submenu.classList.add('show');
+        submenu.style.maxHeight = submenu.scrollHeight + 'px';
+        
+        if (arrow) {
+            arrow.classList.add('rotated');
         }
-    } else if (path.includes('/orders/')) {
-        pageName = 'Quản lý đơn hàng';
-    } else if (path.includes('/users/')) {
-        pageName = 'Quản lý người dùng';
-    } else if (path.includes('/categories/')) {
-        pageName = 'Quản lý danh mục';
-    } else if (path.includes('/reviews/')) {
-        pageName = 'Quản lý đánh giá';
     }
-    
-    currentPageElement.textContent = pageName;
 }
 
-// Real-time search
-const searchInput = document.querySelector('.search-form input');
-if (searchInput) {
-    let searchTimeout;
-    searchInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            console.log('Searching for:', this.value);
-        }, 500);
-    });
+// ✅ Utility function để programmatically đóng menu
+function closeSubmenu(menuId) {
+    const submenu = document.getElementById(menuId);
+    const trigger = document.querySelector(`[data-toggle-submenu="${menuId}"]`);
+    const arrow = trigger?.querySelector('.menu-arrow');
+    
+    if (submenu && submenu.classList.contains('show')) {
+        submenu.classList.remove('show');
+        submenu.style.maxHeight = '0px';
+        
+        if (arrow) {
+            arrow.classList.remove('rotated');
+        }
+    }
 }
 </script>
