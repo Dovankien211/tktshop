@@ -56,191 +56,192 @@ $colors = $pdo->query("
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <h2>Quản lý màu sắc giày</h2>
-                    <a href="/tktshop/admin/colors/create.php" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Thêm màu sắc
-                    </a>
-                </div>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center py-3">
+                <h2>Quản lý màu sắc giày</h2>
+                <a href="/tktshop/admin/colors/create.php" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Thêm màu sắc
+                </a>
+            </div>
 
-                <?php showAlert(); ?>
+            <?php showAlert(); ?>
 
-                <div class="row mb-4">
-                    <div class="col-md-12">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title">Hướng dẫn quản lý màu sắc</h5>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <ul class="list-unstyled">
-                                            <li><i class="fas fa-palette text-primary me-2"></i>Màu sắc được sắp xếp theo thứ tự hiển thị</li>
-                                            <li><i class="fas fa-warning text-warning me-2"></i>Không thể xóa màu đã có sản phẩm sử dụng</li>
-                                            <li><i class="fas fa-eye text-success me-2"></i>Màu ẩn sẽ không hiển thị cho khách hàng</li>
-                                        </ul>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <ul class="list-unstyled">
-                                            <li><i class="fas fa-code text-info me-2"></i>Mã màu sử dụng định dạng HEX (#RRGGBB)</li>
-                                            <li><i class="fas fa-sort text-secondary me-2"></i>Thay đổi thứ tự để sắp xếp hiển thị</li>
-                                            <li><i class="fas fa-cubes text-purple me-2"></i>Xem biến thể sản phẩm sử dụng màu</li>
-                                        </ul>
-                                    </div>
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Hướng dẫn quản lý màu sắc</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <ul class="list-unstyled">
+                                        <li><i class="fas fa-palette text-primary me-2"></i>Màu sắc được sắp xếp theo thứ tự hiển thị</li>
+                                        <li><i class="fas fa-warning text-warning me-2"></i>Không thể xóa màu đã có sản phẩm sử dụng</li>
+                                        <li><i class="fas fa-eye text-success me-2"></i>Màu ẩn sẽ không hiển thị cho khách hàng</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <ul class="list-unstyled">
+                                        <li><i class="fas fa-code text-info me-2"></i>Mã màu sử dụng định dạng HEX (#RRGGBB)</li>
+                                        <li><i class="fas fa-sort text-secondary me-2"></i>Thay đổi thứ tự để sắp xếp hiển thị</li>
+                                        <li><i class="fas fa-cubes text-purple me-2"></i>Xem biến thể sản phẩm sử dụng màu</li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="card">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Màu sắc</th>
+                                    <th>Tên màu</th>
+                                    <th>Mã màu</th>
+                                    <th>Thứ tự</th>
+                                    <th>Biến thể</th>
+                                    <th>Sản phẩm</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($colors)): ?>
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Màu sắc</th>
-                                        <th>Tên màu</th>
-                                        <th>Mã màu</th>
-                                        <th>Thứ tự</th>
-                                        <th>Biến thể</th>
-                                        <th>Sản phẩm</th>
-                                        <th>Trạng thái</th>
-                                        <th>Hành động</th>
+                                        <td colspan="9" class="text-center">
+                                            <div class="py-4">
+                                                <i class="fas fa-palette fa-3x text-muted mb-3"></i>
+                                                <h5>Chưa có màu sắc nào</h5>
+                                                <p class="text-muted">Hãy thêm màu sắc đầu tiên cho hệ thống</p>
+                                                <a href="/tktshop/admin/colors/create.php" class="btn btn-primary">
+                                                    <i class="fas fa-plus"></i> Thêm màu sắc
+                                                </a>
+                                            </div>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($colors)): ?>
+                                <?php else: ?>
+                                    <?php foreach ($colors as $color): ?>
                                         <tr>
-                                            <td colspan="9" class="text-center">
-                                                <div class="py-4">
-                                                    <i class="fas fa-palette fa-3x text-muted mb-3"></i>
-                                                    <h5>Chưa có màu sắc nào</h5>
-                                                    <p class="text-muted">Hãy thêm màu sắc đầu tiên cho hệ thống</p>
-                                                    <a href="/tktshop/admin/colors/create.php" class="btn btn-primary">
-                                                        <i class="fas fa-plus"></i> Thêm màu sắc
+                                            <td><?= $color['id'] ?></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="rounded-circle me-3" 
+                                                         style="width: 40px; height: 40px; background-color: <?= htmlspecialchars($color['ma_mau']) ?>; border: 2px solid #dee2e6;">
+                                                    </div>
+                                                    <div class="rounded-circle" 
+                                                         style="width: 20px; height: 20px; background-color: <?= htmlspecialchars($color['ma_mau']) ?>; border: 1px solid #ccc;">
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <strong><?= htmlspecialchars($color['ten_mau']) ?></strong>
+                                            </td>
+                                            <td>
+                                                <code><?= strtoupper($color['ma_mau']) ?></code>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary"><?= $color['thu_tu_hien_thi'] ?></span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-<?= $color['so_bien_the'] > 0 ? 'success' : 'secondary' ?>">
+                                                    <?= $color['so_bien_the'] ?> biến thể
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-<?= $color['so_san_pham'] > 0 ? 'info' : 'secondary' ?>">
+                                                    <?= $color['so_san_pham'] ?> sản phẩm
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <?php if ($color['trang_thai'] == 'hoat_dong'): ?>
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-eye me-1"></i>Hiển thị
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">
+                                                        <i class="fas fa-eye-slash me-1"></i>Ẩn
+                                                    </span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="/tktshop/admin/colors/edit.php?id=<?= $color['id'] ?>" 
+                                                       class="btn btn-warning" title="Sửa">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <a href="/tktshop/admin/colors/index.php?delete=<?= $color['id'] ?>" 
+                                                       class="btn btn-danger"
+                                                       title="Xóa"
+                                                       onclick="return confirm('Bạn có chắc muốn xóa màu sắc này?\n\nLưu ý: Không thể xóa nếu đã có sản phẩm sử dụng.')">
+                                                        <i class="fas fa-trash"></i>
                                                     </a>
                                                 </div>
                                             </td>
                                         </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($colors as $color): ?>
-                                            <tr>
-                                                <td><?= $color['id'] ?></td>
-                                                <td>
-                                                    <div class="d-flex align-items-center">
-                                                        <div class="rounded-circle me-3" 
-                                                             style="width: 40px; height: 40px; background-color: <?= htmlspecialchars($color['ma_mau']) ?>; border: 2px solid #dee2e6;">
-                                                        </div>
-                                                        <div class="rounded-circle" 
-                                                             style="width: 20px; height: 20px; background-color: <?= htmlspecialchars($color['ma_mau']) ?>; border: 1px solid #ccc;">
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <strong><?= htmlspecialchars($color['ten_mau']) ?></strong>
-                                                </td>
-                                                <td>
-                                                    <code><?= strtoupper($color['ma_mau']) ?></code>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-secondary"><?= $color['thu_tu_hien_thi'] ?></span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-<?= $color['so_bien_the'] > 0 ? 'success' : 'secondary' ?>">
-                                                        <?= $color['so_bien_the'] ?> biến thể
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-<?= $color['so_san_pham'] > 0 ? 'info' : 'secondary' ?>">
-                                                        <?= $color['so_san_pham'] ?> sản phẩm
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php if ($color['trang_thai'] == 'hoat_dong'): ?>
-                                                        <span class="badge bg-success">
-                                                            <i class="fas fa-eye me-1"></i>Hiển thị
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-secondary">
-                                                            <i class="fas fa-eye-slash me-1"></i>Ẩn
-                                                        </span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <a href="/tktshop/admin/colors/edit.php?id=<?= $color['id'] ?>" 
-                                                           class="btn btn-warning" title="Sửa">
-                                                            <i class="fas fa-edit"></i>
-                                                        </a>
-                                                        <a href="/tktshop/admin/colors/index.php?delete=<?= $color['id'] ?>" 
-                                                           class="btn btn-danger"
-                                                           title="Xóa"
-                                                           onclick="return confirm('Bạn có chắc muốn xóa màu sắc này?\n\nLưu ý: Không thể xóa nếu đã có sản phẩm sử dụng.')">
-                                                            <i class="fas fa-trash"></i>
-                                                        </a>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
+            </div>
 
-                <!-- Quick Add Form -->
-                <?php if (!empty($colors)): ?>
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>Thêm nhanh màu sắc</h5>
-                        </div>
-                        <div class="card-body">
-                            <form method="POST" action="/tktshop/admin/colors/create.php" class="row g-3">
-                                <div class="col-md-3">
+            <!-- Quick Add Form -->
+            <?php if (!empty($colors)): ?>
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5>Thêm nhanh màu sắc</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="/tktshop/admin/colors/create.php" class="row g-3">
+                            <div class="col-md-3">
+                                <input type="text" 
+                                       class="form-control" 
+                                       name="ten_mau" 
+                                       placeholder="Tên màu (VD: Đỏ đậm)"
+                                       required>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="input-group">
+                                    <input type="color" 
+                                           class="form-control form-control-color" 
+                                           name="ma_mau_picker" 
+                                           style="width: 60px;">
                                     <input type="text" 
                                            class="form-control" 
-                                           name="ten_mau" 
-                                           placeholder="Tên màu (VD: Đỏ đậm)"
-                                           required>
+                                           name="ma_mau" 
+                                           placeholder="#FF0000"
+                                           pattern="^#[0-9A-Fa-f]{6}$">
                                 </div>
-                                <div class="col-md-3">
-                                    <div class="input-group">
-                                        <input type="color" 
-                                               class="form-control form-control-color" 
-                                               name="ma_mau_picker" 
-                                               style="width: 60px;">
-                                        <input type="text" 
-                                               class="form-control" 
-                                               name="ma_mau" 
-                                               placeholder="#FF0000"
-                                               pattern="^#[0-9A-Fa-f]{6}$">
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="number" 
-                                           class="form-control" 
-                                           name="thu_tu_hien_thi" 
-                                           placeholder="Thứ tự"
-                                           value="<?= max(array_column($colors, 'thu_tu_hien_thi')) + 1 ?>">
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-plus"></i> Thêm nhanh
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" 
+                                       class="form-control" 
+                                       name="thu_tu_hien_thi" 
+                                       placeholder="Thứ tự"
+                                       value="<?= max(array_column($colors, 'thu_tu_hien_thi')) + 1 ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Thêm nhanh
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
