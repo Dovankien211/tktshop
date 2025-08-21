@@ -1,5 +1,5 @@
 <?php
-// admin/categories/index.php - ĐÃ SỬA ĐƯỜNG DẪN
+// admin/categories/index.php - ĐÃ SỬA LAYOUT
 /**
  * Quản lý danh mục giày
  */
@@ -35,7 +35,7 @@ if (isset($_GET['delete'])) {
             }
         }
     }
-    redirect('admin/categories/'); // ĐÃ SỬA
+    redirect('admin/categories/');
 }
 
 // Lấy danh sách danh mục với thông tin cha và số sản phẩm
@@ -74,110 +74,111 @@ $categories = $pdo->query("
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <h2>Quản lý danh mục giày</h2>
-                    <a href="<?= adminUrl('categories/create.php') ?>" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Thêm danh mục
-                    </a>
-                </div>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-tags me-2"></i>Quản lý danh mục giày</h1>
+                <a href="<?= adminUrl('categories/create.php') ?>" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Thêm danh mục
+                </a>
+            </div>
 
-                <?php showAlert(); ?>
+            <?php showAlert(); ?>
 
-                <div class="card">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Tên danh mục</th>
+                                    <th>Slug</th>
+                                    <th>Danh mục cha</th>
+                                    <th>Sản phẩm</th>
+                                    <th>Thứ tự</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($categories)): ?>
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Tên danh mục</th>
-                                        <th>Slug</th>
-                                        <th>Danh mục cha</th>
-                                        <th>Sản phẩm</th>
-                                        <th>Thứ tự</th>
-                                        <th>Trạng thái</th>
-                                        <th>Hành động</th>
+                                        <td colspan="8" class="text-center">Chưa có danh mục nào</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($categories)): ?>
-                                        <tr>
-                                            <td colspan="8" class="text-center">Chưa có danh mục nào</td>
-                                        </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($categories as $category): ?>
-                                            <tr class="<?= !$category['danh_muc_cha_id'] ? 'category-parent' : '' ?>">
-                                                <td><?= $category['id'] ?></td>
-                                                <td>
-                                                    <?php if ($category['danh_muc_cha_id']): ?>
-                                                        <i class="fas fa-level-up-alt fa-rotate-90 text-muted me-2"></i>
-                                                    <?php endif; ?>
-                                                    
-                                                    <?php if ($category['hinh_anh']): ?>
-                                                        <img src="<?= uploadsUrl('categories/' . $category['hinh_anh']) ?>" 
-                                                             alt="<?= htmlspecialchars($category['ten_danh_muc']) ?>"
-                                                             style="width: 30px; height: 30px; object-fit: cover;"
-                                                             class="rounded me-2">
-                                                    <?php endif; ?>
-                                                    
-                                                    <strong><?= htmlspecialchars($category['ten_danh_muc']) ?></strong>
-                                                    
-                                                    <?php if ($category['mo_ta']): ?>
-                                                        <br><small class="text-muted"><?= htmlspecialchars(substr($category['mo_ta'], 0, 50)) ?>...</small>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <code><?= htmlspecialchars($category['slug']) ?></code>
-                                                </td>
-                                                <td>
-                                                    <?php if ($category['ten_danh_muc_cha']): ?>
-                                                        <span class="badge bg-secondary">
-                                                            <?= htmlspecialchars($category['ten_danh_muc_cha']) ?>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">Danh mục gốc</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-<?= $category['so_san_pham'] > 0 ? 'success' : 'secondary' ?>">
-                                                        <?= $category['so_san_pham'] ?> sản phẩm
+                                <?php else: ?>
+                                    <?php foreach ($categories as $category): ?>
+                                        <tr class="<?= !$category['danh_muc_cha_id'] ? 'category-parent' : '' ?>">
+                                            <td><?= $category['id'] ?></td>
+                                            <td>
+                                                <?php if ($category['danh_muc_cha_id']): ?>
+                                                    <i class="fas fa-level-up-alt fa-rotate-90 text-muted me-2"></i>
+                                                <?php endif; ?>
+                                                
+                                                <?php if ($category['hinh_anh']): ?>
+                                                    <img src="<?= uploadsUrl('categories/' . $category['hinh_anh']) ?>" 
+                                                         alt="<?= htmlspecialchars($category['ten_danh_muc']) ?>"
+                                                         style="width: 30px; height: 30px; object-fit: cover;"
+                                                         class="rounded me-2">
+                                                <?php endif; ?>
+                                                
+                                                <strong><?= htmlspecialchars($category['ten_danh_muc']) ?></strong>
+                                                
+                                                <?php if ($category['mo_ta']): ?>
+                                                    <br><small class="text-muted"><?= htmlspecialchars(substr($category['mo_ta'], 0, 50)) ?>...</small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <code><?= htmlspecialchars($category['slug']) ?></code>
+                                            </td>
+                                            <td>
+                                                <?php if ($category['ten_danh_muc_cha']): ?>
+                                                    <span class="badge bg-secondary">
+                                                        <?= htmlspecialchars($category['ten_danh_muc_cha']) ?>
                                                     </span>
-                                                </td>
-                                                <td><?= $category['thu_tu_hien_thi'] ?></td>
-                                                <td>
-                                                    <?php if ($category['trang_thai'] == 'hoat_dong'): ?>
-                                                        <span class="badge bg-success">Hoạt động</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-secondary">Ẩn</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <a href="<?= adminUrl('categories/edit.php?id=' . $category['id']) ?>" 
-                                                           class="btn btn-warning" title="Sửa">
-                                                            <i class="fas fa-edit"></i>
-                                                        </a>
-                                                        <a href="<?= adminUrl('categories/?delete=' . $category['id']) ?>" 
-                                                           class="btn btn-danger"
-                                                           title="Xóa"
-                                                           onclick="return confirm('Bạn có chắc muốn xóa danh mục này?')">
-                                                            <i class="fas fa-trash"></i>
-                                                        </a>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                                <?php else: ?>
+                                                    <span class="text-muted">Danh mục gốc</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-<?= $category['so_san_pham'] > 0 ? 'success' : 'secondary' ?>">
+                                                    <?= $category['so_san_pham'] ?> sản phẩm
+                                                </span>
+                                            </td>
+                                            <td><?= $category['thu_tu_hien_thi'] ?></td>
+                                            <td>
+                                                <?php if ($category['trang_thai'] == 'hoat_dong'): ?>
+                                                    <span class="badge bg-success">Hoạt động</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Ẩn</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="<?= adminUrl('categories/edit.php?id=' . $category['id']) ?>" 
+                                                       class="btn btn-warning" title="Sửa">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <a href="<?= adminUrl('categories/?delete=' . $category['id']) ?>" 
+                                                       class="btn btn-danger"
+                                                       title="Xóa"
+                                                       onclick="return confirm('Bạn có chắc muốn xóa danh mục này?')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
