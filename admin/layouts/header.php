@@ -1,17 +1,17 @@
 <?php
 // admin/layouts/header.php
 /**
- * Header layout cho admin panel
+ * Header layout cho admin panel với sidebar toggle
  */
 
 // Kiểm tra đăng nhập
-if (!isset($_SESSION['admin_id'])) {
+if (!isset($_SESSION['admin_id']) && !isset($_SESSION['user_id'])) {
     header('Location: /tktshop/admin/login.php');
     exit;
 }
 
-$admin_name = $_SESSION['admin_name'] ?? 'Administrator';
-$admin_role = $_SESSION['admin_role'] ?? 'admin';
+$admin_name = $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? 'Administrator';
+$admin_role = $_SESSION['admin_role'] ?? $_SESSION['user_role'] ?? 'admin';
 $admin_avatar = $_SESSION['admin_avatar'] ?? '';
 
 // Đếm thông báo
@@ -31,6 +31,89 @@ try {
 ?>
 
 <style>
+/* ✅ CSS CHO LAYOUT VỚI SIDEBAR TOGGLE */
+.main-content {
+    margin-left: 280px; /* Width của sidebar */
+    min-height: 100vh;
+    transition: margin-left 0.3s ease;
+    background: #f8f9fa;
+}
+
+/* Khi sidebar collapsed */
+.sidebar-collapsed .main-content {
+    margin-left: 60px; /* Width khi collapsed */
+}
+
+.sidebar-collapsed .admin-sidebar {
+    width: 60px;
+    overflow: hidden;
+}
+
+.sidebar-collapsed .sidebar-header .sidebar-brand span {
+    display: none;
+}
+
+.sidebar-collapsed .menu-text,
+.sidebar-collapsed .user-details h6,
+.sidebar-collapsed .user-details small {
+    display: none;
+}
+
+.sidebar-collapsed .menu-link {
+    justify-content: center;
+    padding: 12px 8px;
+}
+
+.sidebar-collapsed .menu-arrow {
+    display: none;
+}
+
+.sidebar-collapsed .user-section {
+    padding: 10px 8px;
+}
+
+.sidebar-collapsed .user-avatar {
+    margin-right: 0;
+}
+
+.sidebar-collapsed .logout-btn {
+    padding: 8px;
+}
+
+.sidebar-collapsed .logout-btn i {
+    margin-right: 0 !important;
+}
+
+.sidebar-collapsed .logout-btn span {
+    display: none;
+}
+
+/* Toggle button */
+.sidebar-toggle {
+    position: fixed;
+    top: 20px;
+    left: 290px; /* Sidebar width + 10px */
+    z-index: 1001;
+    background: #3498db;
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+    background: #2980b9;
+    transform: scale(1.1);
+}
+
+.sidebar-collapsed .sidebar-toggle {
+    left: 70px; /* Collapsed width + 10px */
+}
+
 .admin-header {
     background: linear-gradient(90deg, #fff 0%, #f8f9fa 100%);
     border-bottom: 1px solid #dee2e6;
@@ -117,9 +200,59 @@ try {
     box-shadow: 0 0 0 0.2rem rgba(52, 144, 220, 0.25);
     border-color: #3490dc;
     background: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+    }
     
+    .admin-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar-open .admin-sidebar {
+        transform: translateX(0);
+    }
+    
+    .sidebar-toggle {
+        left: 20px;
+        top: 20px;
+    }
+    
+    .sidebar-open .sidebar-toggle {
+        left: 290px;
+    }
+}
+
+/* Content wrapper */
+.content-wrapper {
+    padding: 20px;
+    max-width: 100%;
+}
+
+/* Fix cho dashboard cards */
+.dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 </style>
+
+<!-- ✅ TOGGLE BUTTON -->
+<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+</button>
 
 <header class="admin-header">
     <div class="container-fluid px-3">
@@ -127,8 +260,8 @@ try {
             <!-- Left side - Brand & Navigation -->
             <div class="col-md-6">
                 <div class="d-flex align-items-center">
-                    <!-- Mobile toggle (if needed) -->
-                    <button class="btn btn-link d-md-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
+                    <!-- Mobile toggle -->
+                    <button class="btn btn-link d-md-none me-2" type="button" onclick="toggleMobileSidebar()">
                         <i class="fas fa-bars"></i>
                     </button>
                     
@@ -137,7 +270,7 @@ try {
                         <i class="fas fa-store me-2"></i>TKT Admin
                     </a>
                     
-                    <!-- Breadcrumb (sẽ được cập nhật bởi JavaScript hoặc PHP) -->
+                    <!-- Breadcrumb -->
                     <nav aria-label="breadcrumb" class="breadcrumb-nav d-none d-lg-block">
                         <ol class="breadcrumb mb-0">
                             <li class="breadcrumb-item">
@@ -240,7 +373,7 @@ try {
                                         </div>
                                         <div>
                                             <div class="fw-bold"><?= htmlspecialchars($admin_name) ?></div>
-                                            <small class="text-muted"><?= htmlspecialchars($_SESSION['admin_email'] ?? '') ?></small>
+                                            <small class="text-muted"><?= htmlspecialchars($_SESSION['admin_email'] ?? $_SESSION['user_email'] ?? '') ?></small>
                                         </div>
                                     </div>
                                 </div>
@@ -280,9 +413,54 @@ try {
 </header>
 
 <script>
+// ✅ JAVASCRIPT CHO TOGGLE SIDEBAR
+function toggleSidebar() {
+    const body = document.body;
+    const button = document.getElementById('sidebarToggle');
+    const icon = button.querySelector('i');
+    
+    body.classList.toggle('sidebar-collapsed');
+    
+    // Thay đổi icon
+    if (body.classList.contains('sidebar-collapsed')) {
+        icon.className = 'fas fa-chevron-right';
+    } else {
+        icon.className = 'fas fa-bars';
+    }
+    
+    // Lưu trạng thái vào localStorage
+    localStorage.setItem('sidebarCollapsed', body.classList.contains('sidebar-collapsed'));
+}
+
+// Mobile toggle
+function toggleMobileSidebar() {
+    document.body.classList.toggle('sidebar-open');
+}
+
+// Khôi phục trạng thái sidebar từ localStorage
 document.addEventListener('DOMContentLoaded', function() {
+    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    const button = document.getElementById('sidebarToggle');
+    
+    if (isCollapsed && button) {
+        document.body.classList.add('sidebar-collapsed');
+        button.querySelector('i').className = 'fas fa-chevron-right';
+    }
+    
     // Update breadcrumb based on current page
     updateBreadcrumb();
+    
+    // Mobile: Đóng sidebar khi click outside
+    if (window.innerWidth <= 768) {
+        document.addEventListener('click', function(e) {
+            const sidebar = document.querySelector('.admin-sidebar');
+            const toggleBtn = document.getElementById('sidebarToggle');
+            
+            if (!sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    }
     
     // Auto-refresh notifications every 30 seconds
     setInterval(function() {
@@ -328,7 +506,6 @@ if (searchInput) {
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-            // Implement live search here
             console.log('Searching for:', this.value);
         }, 500);
     });
