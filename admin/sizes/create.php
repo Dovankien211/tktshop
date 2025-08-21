@@ -85,145 +85,146 @@ $existing_sizes = $pdo->query("SELECT kich_co FROM kich_co ORDER BY thu_tu_sap_x
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <h2>Thêm kích cỡ mới</h2>
-                    <a href="/tktshop/admin/sizes/" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Quay lại
-                    </a>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center py-3">
+                <h2>Thêm kích cỡ mới</h2>
+                <a href="/tktshop/admin/sizes/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </a>
+            </div>
+
+            <?php if (!empty($errors)): ?>
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        <?php foreach ($errors as $error): ?>
+                            <li><?= $error ?></li>
+                        <?php endforeach; ?>
+                    </ul>
                 </div>
+            <?php endif; ?>
 
-                <?php if (!empty($errors)): ?>
-                    <div class="alert alert-danger">
-                        <ul class="mb-0">
-                            <?php foreach ($errors as $error): ?>
-                                <li><?= $error ?></li>
-                            <?php endforeach; ?>
-                        </ul>
+            <div class="row">
+                <!-- Form thêm kích cỡ -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-ruler me-2"></i>Thông tin kích cỡ</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST">
+                                <div class="mb-3">
+                                    <label for="kich_co" class="form-label">Kích cỡ <span class="text-danger">*</span></label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="kich_co" 
+                                           name="kich_co" 
+                                           value="<?= htmlspecialchars($_POST['kich_co'] ?? '') ?>"
+                                           placeholder="VD: 40, 40.5"
+                                           required>
+                                    <div class="form-text">Chỉ được nhập số từ 30 đến 50 (hỗ trợ số thập phân)</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="mo_ta" class="form-label">Mô tả</label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="mo_ta" 
+                                           name="mo_ta" 
+                                           value="<?= htmlspecialchars($_POST['mo_ta'] ?? '') ?>"
+                                           placeholder="Sẽ tự động tạo nếu để trống">
+                                    <div class="form-text">Để trống sẽ tự động tạo "Size [số]"</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="thu_tu_sap_xep" class="form-label">Thứ tự sắp xếp</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="thu_tu_sap_xep" 
+                                           name="thu_tu_sap_xep" 
+                                           value="<?= $_POST['thu_tu_sap_xep'] ?? 0 ?>"
+                                           min="0">
+                                    <div class="form-text">Để 0 sẽ tự động tính theo kích cỡ. Số nhỏ hiển thị trước.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="trang_thai" class="form-label">Trạng thái</label>
+                                    <select class="form-select" id="trang_thai" name="trang_thai">
+                                        <option value="hoat_dong" <?= ($_POST['trang_thai'] ?? 'hoat_dong') == 'hoat_dong' ? 'selected' : '' ?>>
+                                            Hoạt động
+                                        </option>
+                                        <option value="an" <?= ($_POST['trang_thai'] ?? '') == 'an' ? 'selected' : '' ?>>
+                                            Ẩn
+                                        </option>
+                                    </select>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save"></i> Lưu kích cỡ
+                                    </button>
+                                    <a href="/tktshop/admin/sizes/" class="btn btn-secondary">Hủy</a>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                <?php endif; ?>
-
-                <div class="row">
-                    <!-- Form thêm kích cỡ -->
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5><i class="fas fa-ruler me-2"></i>Thông tin kích cỡ</h5>
+                </div>
+                
+                <!-- Gợi ý kích cỡ -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-lightbulb me-2"></i>Kích cỡ phổ biến</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Click để chọn nhanh:</p>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <?php foreach ($common_sizes as $size): ?>
+                                    <?php $is_existing = in_array($size, $existing_sizes); ?>
+                                    <button type="button" 
+                                            class="btn btn-sm <?= $is_existing ? 'btn-secondary' : 'btn-outline-primary' ?> size-btn"
+                                            data-size="<?= $size ?>"
+                                            <?= $is_existing ? 'disabled title="Đã tồn tại"' : '' ?>>
+                                        <?= $size ?>
+                                        <?= $is_existing ? ' ✓' : '' ?>
+                                    </button>
+                                <?php endforeach; ?>
                             </div>
-                            <div class="card-body">
-                                <form method="POST">
-                                    <div class="mb-3">
-                                        <label for="kich_co" class="form-label">Kích cỡ <span class="text-danger">*</span></label>
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="kich_co" 
-                                               name="kich_co" 
-                                               value="<?= htmlspecialchars($_POST['kich_co'] ?? '') ?>"
-                                               placeholder="VD: 40, 40.5"
-                                               required>
-                                        <div class="form-text">Chỉ được nhập số từ 30 đến 50 (hỗ trợ số thập phân)</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="mo_ta" class="form-label">Mô tả</label>
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="mo_ta" 
-                                               name="mo_ta" 
-                                               value="<?= htmlspecialchars($_POST['mo_ta'] ?? '') ?>"
-                                               placeholder="Sẽ tự động tạo nếu để trống">
-                                        <div class="form-text">Để trống sẽ tự động tạo "Size [số]"</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="thu_tu_sap_xep" class="form-label">Thứ tự sắp xếp</label>
-                                        <input type="number" 
-                                               class="form-control" 
-                                               id="thu_tu_sap_xep" 
-                                               name="thu_tu_sap_xep" 
-                                               value="<?= $_POST['thu_tu_sap_xep'] ?? 0 ?>"
-                                               min="0">
-                                        <div class="form-text">Để 0 sẽ tự động tính theo kích cỡ. Số nhỏ hiển thị trước.</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="trang_thai" class="form-label">Trạng thái</label>
-                                        <select class="form-select" id="trang_thai" name="trang_thai">
-                                            <option value="hoat_dong" <?= ($_POST['trang_thai'] ?? 'hoat_dong') == 'hoat_dong' ? 'selected' : '' ?>>
-                                                Hoạt động
-                                            </option>
-                                            <option value="an" <?= ($_POST['trang_thai'] ?? '') == 'an' ? 'selected' : '' ?>>
-                                                Ẩn
-                                            </option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save"></i> Lưu kích cỡ
-                                        </button>
-                                        <a href="/tktshop/admin/sizes/" class="btn btn-secondary">Hủy</a>
-                                    </div>
-                                </form>
+                            
+                            <div class="alert alert-info">
+                                <strong>Lưu ý:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Kích cỡ giày thường từ 35-45</li>
+                                    <li>Có thể sử dụng số thập phân (VD: 40.5)</li>
+                                    <li>Thứ tự sắp xếp sẽ tự động tính nếu để trống</li>
+                                    <li>Các size đã có sẽ hiển thị màu xám</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Gợi ý kích cỡ -->
-                    <div class="col-md-6">
-                        <div class="card">
+                    <!-- Danh sách size hiện có -->
+                    <?php if (!empty($existing_sizes)): ?>
+                        <div class="card mt-3">
                             <div class="card-header">
-                                <h5><i class="fas fa-lightbulb me-2"></i>Kích cỡ phổ biến</h5>
+                                <h5><i class="fas fa-list me-2"></i>Kích cỡ hiện có</h5>
                             </div>
                             <div class="card-body">
-                                <p class="text-muted">Click để chọn nhanh:</p>
-                                <div class="d-flex flex-wrap gap-2 mb-3">
-                                    <?php foreach ($common_sizes as $size): ?>
-                                        <?php $is_existing = in_array($size, $existing_sizes); ?>
-                                        <button type="button" 
-                                                class="btn btn-sm <?= $is_existing ? 'btn-secondary' : 'btn-outline-primary' ?> size-btn"
-                                                data-size="<?= $size ?>"
-                                                <?= $is_existing ? 'disabled title="Đã tồn tại"' : '' ?>>
-                                            <?= $size ?>
-                                            <?= $is_existing ? ' ✓' : '' ?>
-                                        </button>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <?php foreach ($existing_sizes as $size): ?>
+                                        <span class="badge bg-secondary"><?= $size ?></span>
                                     <?php endforeach; ?>
-                                </div>
-                                
-                                <div class="alert alert-info">
-                                    <strong>Lưu ý:</strong>
-                                    <ul class="mb-0 mt-2">
-                                        <li>Kích cỡ giày thường từ 35-45</li>
-                                        <li>Có thể sử dụng số thập phân (VD: 40.5)</li>
-                                        <li>Thứ tự sắp xếp sẽ tự động tính nếu để trống</li>
-                                        <li>Các size đã có sẽ hiển thị màu xám</li>
-                                    </ul>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Danh sách size hiện có -->
-                        <?php if (!empty($existing_sizes)): ?>
-                            <div class="card mt-3">
-                                <div class="card-header">
-                                    <h5><i class="fas fa-list me-2"></i>Kích cỡ hiện có</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex flex-wrap gap-1">
-                                        <?php foreach ($existing_sizes as $size): ?>
-                                            <span class="badge bg-secondary"><?= $size ?></span>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
