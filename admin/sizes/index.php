@@ -54,163 +54,164 @@ $sizes = $pdo->query("
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <?php include '../layouts/sidebar.php'; ?>
-            
-            <!-- Main content -->
-            <div class="col-md-10">
-                <div class="d-flex justify-content-between align-items-center py-3">
-                    <h2>Quản lý kích cỡ giày</h2>
-                    <a href="/tktshop/admin/sizes/create.php" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Thêm kích cỡ
-                    </a>
-                </div>
+    <!-- ✅ Include Header -->
+    <?php include '../layouts/header.php'; ?>
+    
+    <!-- ✅ Include Sidebar -->
+    <?php include '../layouts/sidebar.php'; ?>
+    
+    <!-- ✅ Main Content -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="d-flex justify-content-between align-items-center py-3">
+                <h2>Quản lý kích cỡ giày</h2>
+                <a href="/tktshop/admin/sizes/create.php" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Thêm kích cỡ
+                </a>
+            </div>
 
-                <?php showAlert(); ?>
+            <?php showAlert(); ?>
 
-                <div class="card">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Kích cỡ</th>
+                                    <th>Mô tả</th>
+                                    <th>Biến thể</th>
+                                    <th>Sản phẩm</th>
+                                    <th>Tồn kho</th>
+                                    <th>Đã bán</th>
+                                    <th>Thứ tự</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($sizes)): ?>
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Kích cỡ</th>
-                                        <th>Mô tả</th>
-                                        <th>Biến thể</th>
-                                        <th>Sản phẩm</th>
-                                        <th>Tồn kho</th>
-                                        <th>Đã bán</th>
-                                        <th>Thứ tự</th>
-                                        <th>Trạng thái</th>
-                                        <th>Hành động</th>
+                                        <td colspan="10" class="text-center">Chưa có kích cỡ nào</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($sizes)): ?>
+                                <?php else: ?>
+                                    <?php foreach ($sizes as $size): ?>
                                         <tr>
-                                            <td colspan="10" class="text-center">Chưa có kích cỡ nào</td>
-                                        </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($sizes as $size): ?>
-                                            <tr>
-                                                <td><?= $size['id'] ?></td>
-                                                <td>
-                                                    <span class="badge bg-dark fs-6">Size <?= htmlspecialchars($size['kich_co']) ?></span>
-                                                </td>
-                                                <td><?= htmlspecialchars($size['mo_ta']) ?></td>
-                                                <td>
-                                                    <span class="badge bg-<?= $size['so_bien_the'] > 0 ? 'info' : 'secondary' ?>">
-                                                        <?= $size['so_bien_the'] ?> biến thể
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-<?= $size['so_san_pham'] > 0 ? 'primary' : 'secondary' ?>">
-                                                        <?= $size['so_san_pham'] ?> sản phẩm
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php if ($size['tong_ton_kho'] > 0): ?>
-                                                        <span class="text-success fw-bold"><?= $size['tong_ton_kho'] ?></span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">0</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if ($size['tong_da_ban'] > 0): ?>
-                                                        <span class="text-primary fw-bold"><?= $size['tong_da_ban'] ?></span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">0</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td><?= $size['thu_tu_sap_xep'] ?></td>
-                                                <td>
-                                                    <?php if ($size['trang_thai'] == 'hoat_dong'): ?>
-                                                        <span class="badge bg-success">Hoạt động</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-secondary">Ẩn</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <a href="/tktshop/admin/sizes/edit.php?id=<?= $size['id'] ?>" 
-                                                           class="btn btn-warning" title="Sửa">
-                                                            <i class="fas fa-edit"></i>
+                                            <td><?= $size['id'] ?></td>
+                                            <td>
+                                                <span class="badge bg-dark fs-6">Size <?= htmlspecialchars($size['kich_co']) ?></span>
+                                            </td>
+                                            <td><?= htmlspecialchars($size['mo_ta']) ?></td>
+                                            <td>
+                                                <span class="badge bg-<?= $size['so_bien_the'] > 0 ? 'info' : 'secondary' ?>">
+                                                    <?= $size['so_bien_the'] ?> biến thể
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-<?= $size['so_san_pham'] > 0 ? 'primary' : 'secondary' ?>">
+                                                    <?= $size['so_san_pham'] ?> sản phẩm
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <?php if ($size['tong_ton_kho'] > 0): ?>
+                                                    <span class="text-success fw-bold"><?= $size['tong_ton_kho'] ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">0</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($size['tong_da_ban'] > 0): ?>
+                                                    <span class="text-primary fw-bold"><?= $size['tong_da_ban'] ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">0</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= $size['thu_tu_sap_xep'] ?></td>
+                                            <td>
+                                                <?php if ($size['trang_thai'] == 'hoat_dong'): ?>
+                                                    <span class="badge bg-success">Hoạt động</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Ẩn</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="/tktshop/admin/sizes/edit.php?id=<?= $size['id'] ?>" 
+                                                       class="btn btn-warning" title="Sửa">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <?php if ($size['so_bien_the'] == 0): ?>
+                                                        <a href="/tktshop/admin/sizes/?delete=<?= $size['id'] ?>" 
+                                                           class="btn btn-danger"
+                                                           title="Xóa"
+                                                           onclick="return confirm('Bạn có chắc muốn xóa kích cỡ này?')">
+                                                            <i class="fas fa-trash"></i>
                                                         </a>
-                                                        <?php if ($size['so_bien_the'] == 0): ?>
-                                                            <a href="/tktshop/admin/sizes/?delete=<?= $size['id'] ?>" 
-                                                               class="btn btn-danger"
-                                                               title="Xóa"
-                                                               onclick="return confirm('Bạn có chắc muốn xóa kích cỡ này?')">
-                                                                <i class="fas fa-trash"></i>
-                                                            </a>
-                                                        <?php else: ?>
-                                                            <button class="btn btn-danger" disabled title="Không thể xóa - đang được sử dụng">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+                                                    <?php else: ?>
+                                                        <button class="btn btn-danger" disabled title="Không thể xóa - đang được sử dụng">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Thống kê tổng quan -->
+            <?php
+            $total_stats = $pdo->query("
+                SELECT 
+                    COUNT(*) as tong_kich_co,
+                    COUNT(CASE WHEN trang_thai = 'hoat_dong' THEN 1 END) as kich_co_hoat_dong,
+                    COUNT(CASE WHEN trang_thai = 'an' THEN 1 END) as kich_co_an
+                FROM kich_co
+            ")->fetch();
+            ?>
+            
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <div class="h3"><?= $total_stats['tong_kich_co'] ?></div>
+                            <div>Tổng kích cỡ</div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Thống kê tổng quan -->
-                <?php
-                $total_stats = $pdo->query("
-                    SELECT 
-                        COUNT(*) as tong_kich_co,
-                        COUNT(CASE WHEN trang_thai = 'hoat_dong' THEN 1 END) as kich_co_hoat_dong,
-                        COUNT(CASE WHEN trang_thai = 'an' THEN 1 END) as kich_co_an
-                    FROM kich_co
-                ")->fetch();
-                ?>
-                
-                <div class="row mt-4">
-                    <div class="col-md-3">
-                        <div class="card bg-primary text-white">
-                            <div class="card-body text-center">
-                                <div class="h3"><?= $total_stats['tong_kich_co'] ?></div>
-                                <div>Tổng kích cỡ</div>
-                            </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <div class="h3"><?= $total_stats['kich_co_hoat_dong'] ?></div>
+                            <div>Đang hoạt động</div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="card bg-success text-white">
-                            <div class="card-body text-center">
-                                <div class="h3"><?= $total_stats['kich_co_hoat_dong'] ?></div>
-                                <div>Đang hoạt động</div>
-                            </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center">
+                            <div class="h3"><?= $total_stats['kich_co_an'] ?></div>
+                            <div>Đã ẩn</div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="card bg-secondary text-white">
-                            <div class="card-body text-center">
-                                <div class="h3"><?= $total_stats['kich_co_an'] ?></div>
-                                <div>Đã ẩn</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card bg-info text-white">
-                            <div class="card-body text-center">
-                                <?php
-                                $used_sizes = $pdo->query("
-                                    SELECT COUNT(DISTINCT kich_co_id) 
-                                    FROM bien_the_san_pham 
-                                    WHERE trang_thai = 'hoat_dong'
-                                ")->fetchColumn();
-                                ?>
-                                <div class="h3"><?= $used_sizes ?></div>
-                                <div>Đang sử dụng</div>
-                            </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <?php
+                            $used_sizes = $pdo->query("
+                                SELECT COUNT(DISTINCT kich_co_id) 
+                                FROM bien_the_san_pham 
+                                WHERE trang_thai = 'hoat_dong'
+                            ")->fetchColumn();
+                            ?>
+                            <div class="h3"><?= $used_sizes ?></div>
+                            <div>Đang sử dụng</div>
                         </div>
                     </div>
                 </div>
